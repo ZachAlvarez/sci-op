@@ -36,9 +36,4 @@ for (const file of files) {
   totalScripts += validateScripts(file, html);
 }
 
-const coach = await readFile("form-coach.html", "utf8");
-if (!coach.includes("thisSession !== sessionId") || !coach.includes('window.addEventListener("pagehide", stop)')) {
-  throw new Error("form-coach.html: startup cancellation and camera cleanup checks are missing.");
-}
-
 console.log(`Validated ${files.length} HTML files and ${totalScripts} executable inline scripts.`);

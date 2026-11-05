@@ -19,6 +19,18 @@
 
 Progress is stored only in the browser (`localStorage`) when run outside claude.ai. No workout video is uploaded by the coach, but clearing browser data or switching devices removes locally stored progress. Export/import is not available yet.
 
+## Development
+
+```sh
+npm ci
+npx playwright install chromium   # first time only
+npm run validate                  # every inline script parses
+npm test                          # form-coach camera lifecycle tests
+npm run serve                     # local server at http://127.0.0.1:4173
+```
+
+The tests use Chromium's fake camera and a stubbed MediaPipe module, so they run offline and can simulate slow or failing model loads. They check that the camera is released on End, on page exit, and on load failure, and that ending during startup never starts tracking. CI runs both on every push.
+
 ## Features
 
 - Daily routine: walk, McGill curl-up, side plank, bird dog, sciatic nerve glide, slant-board calf stretch, slackboard balance.

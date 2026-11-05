@@ -4,9 +4,14 @@
   "version": "0.1.0",
   "description": "Static home-training app for disc-related sciatica.",
   "scripts": {
-    "validate": "node scripts/validate-html.mjs"
+    "validate": "node scripts/validate-html.mjs",
+    "serve": "node scripts/serve.mjs",
+    "test": "playwright test"
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.0"
   }
 }
