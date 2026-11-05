@@ -1,0 +1,12 @@
+{
+  "name": "sci-op",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Static home-training app for disc-related sciatica.",
+  "scripts": {
+    "validate": "node scripts/validate-html.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

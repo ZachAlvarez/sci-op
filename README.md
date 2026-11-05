@@ -8,8 +8,8 @@
 
 | File | What it is |
 |---|---|
-| `index.html` | The app. Fully self-contained (3D engine, figure model and fallback frames are embedded), so it runs offline. |
-| `form-coach.html` | Optional camera form coach: rep counting and joint-based form cues using MediaPipe Pose. Needs HTTPS for camera access. |
+| `index.html` | The core app. Its 3D engine, figure model and fallback frames are embedded, so the training experience works offline (with a system-font fallback if Google Fonts is unavailable). |
+| `form-coach.html` | Optional camera form coach: rep counting and joint-based form cues using MediaPipe Pose. Needs HTTPS for camera access and an internet connection to load MediaPipe and its pose model. |
 
 ## Run it
 
@@ -17,7 +17,7 @@
 - **Hosted:** enable GitHub Pages (Settings → Pages → deploy from `main`, root). The app is then at `https://<user>.github.io/sci-op/` and the coach at `.../form-coach.html`. Pages serves HTTPS, so the camera coach works there.
 - **Phone:** open the Pages URL in Chrome and use *Add to home screen*.
 
-Progress is stored in the browser (`localStorage`) when run outside claude.ai.
+Progress is stored only in the browser (`localStorage`) when run outside claude.ai. No workout video is uploaded by the coach, but clearing browser data or switching devices removes locally stored progress. Export/import is not available yet.
 
 ## Features
 
@@ -34,6 +34,7 @@ The figure is a rigged humanoid driven by hand-keyframed pose specs per exercise
 
 - The form coach sees joints, not spinal curvature, so it cannot detect low-back rounding.
 - Form-coach thresholds have not been tuned on real users.
+- The form coach is an assistive beta feature, not a diagnostic or clinical measurement tool.
 
 ## Credits
 

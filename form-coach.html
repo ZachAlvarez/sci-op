@@ -218,7 +218,7 @@ function analyze(lm, t){
 }
 
 /* ---------- camera + model ---------- */
-let landmarker = null, stream = null, running = false, raf = 0;
+let landmarker = null, stream = null, running = false, raf = 0, sessionId = 0;
 const vid = document.getElementById("vid"), ov = document.getElementById("ov"), ctx = ov.getContext("2d");
 async function loadModel(){
   if(landmarker) return landmarker;
@@ -229,6 +229,7 @@ async function loadModel(){
   return landmarker;
 }
 async function start(){
+  const thisSession = ++sessionId;
   if(window.speechSynthesis){ speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(" "); u.volume = 0; speechSynthesis.speak(u); }
   const status = document.getElementById("status");
   document.getElementById("live").classList.add("on"); document.getElementById("setup").style.display = "none";
@@ -238,18 +239,25 @@ async function start(){
   if(!window.isSecureContext || !navigator.mediaDevices){ status.textContent = "The camera needs this page to be opened over https (or localhost)."; return; }
   status.textContent = "Starting camera…";
   try{
-    stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:facing, width:{ideal:1280}, height:{ideal:720}}, audio:false});
+    const nextStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:facing, width:{ideal:1280}, height:{ideal:720}}, audio:false});
+    if(thisSession !== sessionId){ nextStream.getTracks().forEach(t=>t.stop()); return; }
+    stream = nextStream;
   }catch(e){ status.textContent = "Camera access was blocked. Allow camera access for this page and try again."; return; }
-  vid.srcObject = stream; await vid.play();
+  try{ vid.srcObject = stream; await vid.play(); }
+  catch(e){ stop(); status.textContent = "Couldn't start the camera preview. Try again after checking browser camera settings."; return; }
+  if(thisSession !== sessionId) return;
   status.textContent = "Loading pose model…";
-  try{ await loadModel(); }catch(e){ status.textContent = "Couldn't load the pose model. Check your connection."; return; }
+  try{ await loadModel(); }catch(e){ stop(); status.textContent = "Couldn't load the pose model. Check your connection."; return; }
+  if(thisSession !== sessionId) return;
   status.textContent = ""; document.getElementById("stateLbl").textContent = "Step into frame";
   say(`${EXS[ex].name}. ${EXS[ex].place}`);
-  running = true; lastT = 0; loop();
+  running = true; lastT = 0; lastSeen = 0; lastVideoTime = -1; loop();
 }
 function stop(){
+  sessionId++;
   running = false; cancelAnimationFrame(raf);
   if(stream){ stream.getTracks().forEach(t=>t.stop()); stream = null; }
+  vid.srcObject = null;
   if(window.speechSynthesis) speechSynthesis.cancel();
 }
 let lastVideoTime = -1;
@@ -291,6 +299,7 @@ document.getElementById("endBtn").onclick = end;
 document.getElementById("resetBtn").onclick = ()=>{ resetSet(); say("New set."); };
 document.getElementById("voiceBtn").onclick = e=>{ voiceOn = !voiceOn; e.target.textContent = voiceOn ? "Voice on" : "Voice off"; if(!voiceOn) speechSynthesis.cancel(); };
 document.getElementById("again").onclick = ()=>{ document.getElementById("sum").classList.remove("on"); document.getElementById("setup").style.display = ""; };
+window.addEventListener("pagehide", stop);
 </script>
 </body>
 </html>
