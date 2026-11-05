@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Form Coach</title>
+<style>
+:root{--bg:#f5f5f7;--surface:#fff;--ink:#1d1d1f;--muted:#6e6e73;--line:#d2d2d7;--fill:#e8e8ed;--on:#fff;
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Inter","Helvetica Neue",Arial,sans-serif}
+@media (prefers-color-scheme: dark){:root{--bg:#000;--surface:#1c1c1e;--ink:#f5f5f7;--muted:#98989d;--line:#38383a;--fill:#2c2c2e;--on:#000}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);-webkit-font-smoothing:antialiased;letter-spacing:-.01em}
+button{font:inherit;color:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.wrap{max-width:640px;margin:0 auto;padding:calc(env(safe-area-inset-top,0px) + 20px) 16px calc(env(safe-area-inset-bottom,0px) + 24px)}
+h1{font-size:34px;font-weight:700;letter-spacing:-.025em;margin:0}
+.sub{color:var(--muted);margin:4px 0 20px;font-size:15px}
+.group{background:var(--surface);border-radius:16px;overflow:hidden;margin-bottom:18px}
+.opt{display:flex;justify-content:space-between;align-items:center;width:100%;border:0;background:none;padding:14px 16px;text-align:left}
+.opt + .opt{border-top:1px solid var(--line)}
+.opt b{display:block;font-size:17px;font-weight:600}
+.opt span{font-size:14px;color:var(--muted)}
+.opt .dot{flex:none;width:22px;height:22px;border-radius:50%;border:1.5px solid var(--line);margin-left:12px}
+.opt[aria-pressed="true"] .dot{background:var(--ink);border-color:var(--ink);box-shadow:inset 0 0 0 4px var(--surface)}
+.seg{display:flex;background:var(--fill);border-radius:10px;padding:2px;margin-bottom:18px}
+.seg button{flex:1;border:0;background:none;border-radius:8px;padding:9px;font-weight:600;font-size:14px}
+.seg button[aria-pressed="true"]{background:var(--surface);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.primary{width:100%;border:0;background:var(--ink);color:var(--on);border-radius:14px;padding:16px;font-weight:600;font-size:17px}
+.note{font-size:14px;color:var(--muted);background:var(--surface);border-radius:14px;padding:12px 14px;margin:0 0 18px}
+.live{position:fixed;inset:0;background:#000;display:none}
+.live.on{display:block}
+video,canvas.ov{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.mirror{transform:scaleX(-1)}
+.hud{position:absolute;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top,0px) + 12px) 14px 0;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;color:#fff}
+.pill{background:rgba(0,0,0,.45);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);border-radius:16px;padding:10px 14px}
+.big{font-size:56px;font-weight:300;line-height:1;letter-spacing:-.04em;font-variant-numeric:tabular-nums}
+.big small{font-size:20px;opacity:.7}
+.lbl{font-size:13px;opacity:.75}
+.cue{position:absolute;left:14px;right:14px;bottom:calc(env(safe-area-inset-bottom,0px) + 86px);text-align:center;color:#fff;font-size:20px;font-weight:600;text-shadow:0 1px 8px rgba(0,0,0,.6);min-height:28px}
+.bar{position:absolute;left:0;right:0;bottom:0;padding:12px 14px calc(env(safe-area-inset-bottom,0px) + 14px);display:flex;gap:10px;justify-content:center}
+.bar button{border:0;background:rgba(255,255,255,.18);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);color:#fff;border-radius:999px;padding:12px 18px;font-weight:600;font-size:15px}
+.bar .end{background:#fff;color:#000}
+.status{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);color:#fff;text-align:center;font-size:17px;max-width:80%}
+.sum{display:none}
+.sum.on{display:block}
+.row{display:flex;justify-content:space-between;padding:12px 16px;font-size:16px}
+.row + .row{border-top:1px solid var(--line)}
+.row span{color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap" id="setup">
+  <h1>Form Coach</h1>
+  <p class="sub">Counts reps and flags a few form checks from your camera. Everything runs on this device; no video leaves it.</p>
+  <div class="group" id="exList"></div>
+  <div class="seg" role="group" aria-label="Camera"><button data-cam="user" aria-pressed="true">Front camera</button><button data-cam="environment" aria-pressed="false">Back camera</button></div>
+  <p class="note" id="placeNote"></p>
+  <p class="note">What it can't do: it sees joints, not your spine's curve, so it can't tell whether your low back is rounding. Treat its cues as a second pair of eyes, and your own symptoms as the real guide. Stop anything that sends symptoms down the leg.</p>
+  <button class="primary" id="go">Start camera</button>
+</div>
+<div class="wrap sum" id="sum">
+  <h1>Session</h1>
+  <p class="sub" id="sumSub"></p>
+  <div class="group" id="sumRows"></div>
+  <button class="primary" id="again">Back</button>
+</div>
+<div class="live" id="live">
+  <video id="vid" playsinline muted></video>
+  <canvas class="ov" id="ov"></canvas>
+  <div class="hud">
+    <div class="pill"><div class="big" id="count">0</div><div class="lbl" id="countLbl">reps</div></div>
+    <div class="pill" style="text-align:right"><div style="font-weight:600" id="exName"></div><div class="lbl" id="stateLbl">Loading model…</div></div>
+  </div>
+  <div class="status" id="status"></div>
+  <div class="cue" id="cue"></div>
+  <div class="bar"><button id="voiceBtn">Voice on</button><button id="resetBtn">New set</button><button class="end" id="endBtn">End</button></div>
+</div>
+
+<script type="module">
+import {PoseLandmarker, FilesetResolver} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
+
+const EXS = {
+  goblet:{name:"Goblet squat", view:"side", kind:"reps", place:"Side view. Phone at hip height, about 2.5 m away, whole body in frame."},
+  split:{name:"Bulgarian split squat", view:"side", kind:"reps", place:"Side view, working leg closest to the camera. Include the bench in the frame."},
+  hinge:{name:"Hip hinge or RDL", view:"side", kind:"reps", place:"Side view. Phone at hip height, about 2.5 m away."},
+  bridge:{name:"Glute bridge", view:"side", kind:"reps", place:"Side view, phone on the floor or low shelf, about 2 m away."},
+  slbridge:{name:"Single-leg bridge", view:"side", kind:"reps", place:"Side view, planted leg closest to the camera."},
+  sideplank:{name:"Side plank", view:"front", kind:"hold", place:"Camera facing your front, phone low, about 2.5 m away, head to feet in frame."},
+  birddog:{name:"Bird dog", view:"side", kind:"hold", place:"Side view, phone low, about 2 m away."}
+};
+const L = {nose:0, lEar:7, rEar:8, lSh:11, rSh:12, lEl:13, rEl:14, lWr:15, rWr:16, lHip:23, rHip:24, lKn:25, rKn:26, lAn:27, rAn:28, lHeel:29, rHeel:30, lToe:31, rToe:32};
+const EDGES = [[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24],[23,25],[25,27],[24,26],[26,28],[27,31],[28,32],[27,29],[28,30]];
+let ex = "goblet", facing = "user", voiceOn = true;
+
+/* ---------- setup UI ---------- */
+const list = document.getElementById("exList");
+list.innerHTML = Object.entries(EXS).map(([k,v])=>`<button class="opt" data-ex="${k}" aria-pressed="${k===ex}"><div><b>${v.name}</b><span>${v.kind === "hold" ? "Hold timer, form check" : "Rep counter, form check"}</span></div><i class="dot"></i></button>`).join("");
+function syncSetup(){ document.querySelectorAll("[data-ex]").forEach(b=>b.setAttribute("aria-pressed", b.dataset.ex === ex)); document.querySelectorAll("[data-cam]").forEach(b=>b.setAttribute("aria-pressed", b.dataset.cam === facing)); document.getElementById("placeNote").textContent = "Setup: " + EXS[ex].place; }
+document.addEventListener("click", e=>{ const b = e.target.closest("button"); if(!b) return; if(b.dataset.ex){ ex = b.dataset.ex; syncSetup(); } if(b.dataset.cam){ facing = b.dataset.cam; syncSetup(); } });
+syncSetup();
+
+/* ---------- voice ---------- */
+let voice = null;
+function pickVoice(){ const vs = speechSynthesis.getVoices(); for(const n of ["Samantha","Ava","Allison","Google US English","Microsoft Aria","Microsoft Jenny"]){ const v = vs.find(x=>x.name.includes(n)); if(v){ voice = v; return; } } voice = vs.find(v=>/^en/i.test(v.lang)) || null; }
+if(window.speechSynthesis){ pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
+function say(t, interrupt){ if(!voiceOn || !window.speechSynthesis) return; if(interrupt) speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(t); if(voice) u.voice = voice; u.rate = 1.03; speechSynthesis.speak(u); }
+const cueLast = {}; let lastAnyCue = 0;
+function cue(key, text, minGap){
+  const now = performance.now(); document.getElementById("cue").textContent = text;
+  if(now - lastAnyCue < 4000 || now - (cueLast[key]||0) < (minGap||12000)) return false;
+  cueLast[key] = now; lastAnyCue = now; say(text); flags[key] = (flags[key]||0) + 1; return true;
+}
+function clearCue(){ document.getElementById("cue").textContent = ""; }
+
+/* ---------- geometry ---------- */
+let W = 1, H = 1;
+const P = (lm, i)=>({x:lm[i].x*W, y:lm[i].y*H, v:lm[i].visibility ?? 1});
+function ang(a,b,c){ const v1x=a.x-b.x, v1y=a.y-b.y, v2x=c.x-b.x, v2y=c.y-b.y; const d = Math.hypot(v1x,v1y)*Math.hypot(v2x,v2y) || 1; return Math.acos(Math.max(-1, Math.min(1, (v1x*v2x+v1y*v2y)/d)))*180/Math.PI; }
+function tiltFromVertical(a,b){ return Math.atan2(Math.abs(a.x-b.x), Math.abs(a.y-b.y))*180/Math.PI; }
+function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
+function side(lm){ // which side faces the camera better
+  const s = i=>lm[i].visibility ?? 1;
+  const l = s(L.lSh)+s(L.lHip)+s(L.lKn)+s(L.lAn), r = s(L.rSh)+s(L.rHip)+s(L.rKn)+s(L.rAn);
+  return l >= r ? "l" : "r";
+}
+function pts(lm, sd){ const k = sd === "l" ? {sh:L.lSh, hip:L.lHip, kn:L.lKn, an:L.lAn, ear:L.lEar, wr:L.lWr, toe:L.lToe} : {sh:L.rSh, hip:L.rHip, kn:L.rKn, an:L.rAn, ear:L.rEar, wr:L.rWr, toe:L.rToe};
+  const o = {}; for(const n in k) o[n] = P(lm, k[n]); return o; }
+const ema = {}; function sm(k, v, a){ a = a||.45; ema[k] = ema[k] == null ? v : ema[k] + (v - ema[k])*a; return ema[k]; }
+
+/* ---------- rep state machine ---------- */
+let reps = 0, phase = "top", repMin = 999, repMax = 0, downStart = 0, holdSecs = 0, lastT = 0, sets = [], flags = {}, lastSeen = 0;
+function resetSet(){ if(reps || holdSecs > 1) sets.push(EXS[ex].kind === "hold" ? `${Math.round(holdSecs)} s` : `${reps} reps`); reps = 0; phase = "top"; holdSecs = 0; repMin = 999; repMax = 0; for(const k in ema) delete ema[k]; updCount(); }
+function updCount(){ const hold = EXS[ex].kind === "hold"; document.getElementById("count").innerHTML = hold ? `${Math.floor(holdSecs)}<small> s</small>` : String(reps); document.getElementById("countLbl").textContent = hold ? "good-form hold" : "reps"; }
+function repDone(extra){ reps++; updCount(); say(String(reps), false); if(extra) setTimeout(()=>extra(), 400); }
+
+const need = {side:[L.lSh,L.rSh,L.lHip,L.rHip,L.lKn,L.rKn,L.lAn,L.rAn], front:[L.lSh,L.rSh,L.lHip,L.rHip,L.lAn,L.rAn]};
+function visibleEnough(lm){
+  const ids = EXS[ex].view === "side" ? [L.lSh,L.lHip,L.lKn,L.lAn].map((l,i)=>[l,[L.rSh,L.rHip,L.rKn,L.rAn][i]]) : null;
+  if(ids) return ids.every(([a,b])=>Math.max(lm[a].visibility??1, lm[b].visibility??1) > .55) && ids.every(([a,b])=>{ const p = (lm[a].visibility??1) > (lm[b].visibility??1) ? lm[a] : lm[b]; return p.x > .01 && p.x < .99 && p.y > .01 && p.y < .99; });
+  return need.front.every(i=>(lm[i].visibility??1) > .5);
+}
+
+function analyze(lm, t){
+  const dt = Math.min(.2, (t - (lastT||t))/1000); lastT = t;
+  const sd = side(lm), p = pts(lm, sd);
+  const trunk = dist(p.sh, p.hip) || 1;
+  const setState = s=>document.getElementById("stateLbl").textContent = s;
+  if(ex === "goblet" || ex === "split"){
+    let knee;
+    if(ex === "split"){ // front leg = the knee that bends more
+      const a1 = ang(P(lm,L.lHip), P(lm,L.lKn), P(lm,L.lAn)), a2 = ang(P(lm,L.rHip), P(lm,L.rKn), P(lm,L.rAn));
+      knee = sm("knee", Math.min(a1, a2));
+    } else knee = sm("knee", ang(p.hip, p.kn, p.an));
+    const lean = sm("lean", tiltFromVertical(p.sh, p.hip));
+    const downT = ex === "split" ? 118 : 112, upT = ex === "split" ? 152 : 160;
+    if(phase === "top" && knee < upT - 12){ phase = "down"; downStart = t; repMin = 999; }
+    if(phase === "down"){ repMin = Math.min(repMin, knee);
+      if(knee < downT) phase = "bottom";
+      if(knee > upT){ phase = "top"; } }
+    if(phase === "bottom"){ repMin = Math.min(repMin, knee);
+      if(lean > (ex === "split" ? 32 : 48)) cue("lean", ex === "split" ? "Stay tall through the torso." : "Chest up. Sit down between your heels.");
+      if(knee > upT){ phase = "top"; const fast = (t - downStart) < 1300; repDone(()=>{ if(fast) cue("tempo","Slow down on the way down.", 20000); else clearCue(); }); } }
+    setState(phase === "top" ? "Standing" : phase === "down" ? "Lowering" : "Bottom");
+  }
+  if(ex === "hinge"){
+    const hip = sm("hip", ang(p.sh, p.hip, p.kn)), knee = sm("knee", ang(p.hip, p.kn, p.an));
+    const neck = sm("neck", ang(p.ear, p.sh, p.hip));
+    if(phase === "top" && hip < 150){ phase = "down"; downStart = t; repMin = 999; }
+    if(phase === "down" || phase === "bottom"){
+      repMin = Math.min(repMin, hip);
+      if(hip < 125) phase = "bottom";
+      if(knee < 130) cue("knee", "That's turning into a squat. Push the hips back, knees soft.");
+      else if(neck < 145 && phase === "bottom") cue("neck", "Keep your head in line with your back.");
+      else if(hip < 70) cue("deep", "That's deep enough. Stop around mid-shin.");
+      if(hip > 165){ const was = phase; phase = "top"; if(was === "bottom") repDone(); }
+    }
+    setState(phase === "top" ? "Standing" : "Hinging");
+  }
+  if(ex === "bridge" || ex === "slbridge"){
+    const hip = sm("hip", ang(p.sh, p.hip, p.kn));
+    // how far the hip rises above the straight shoulder-to-knee line (image y grows downward)
+    const lineY = p.sh.y + (p.kn.y - p.sh.y) * ((p.hip.x - p.sh.x) / ((p.kn.x - p.sh.x) || 1));
+    const over = sm("over", (lineY - p.hip.y)/trunk);
+    if(phase === "top" && hip < 140) phase = "bottom";
+    if(phase === "bottom" && hip > 162){ phase = "up"; downStart = t; }
+    if(phase === "up"){
+      if(over > .12) cue("arch", "Don't push past straight. Ribs down, squeeze the glutes.");
+      if(hip < 148){ phase = "bottom"; repDone(); }
+    }
+    if(ex === "slbridge" && phase === "up"){
+      const o = sd === "l" ? "r" : "l", oh = P(lm, o === "l" ? L.lHip : L.rHip);
+      if(Math.abs(oh.y - p.hip.y)/trunk > .18) cue("level", "Keep the hips level.");
+    }
+    setState(phase === "up" ? "Top" : "Lowered");
+  }
+  if(ex === "sideplank"){
+    const sh = P(lm,L.lSh).y > P(lm,L.rSh).y ? {sh:P(lm,L.lSh), hip:P(lm,L.lHip), an:P(lm,L.lAn)} : {sh:P(lm,L.rSh), hip:P(lm,L.rHip), an:P(lm,L.rAn)};
+    const line = sm("line", ang(sh.sh, sh.hip, sh.an));
+    const up = dist(sh.sh, sh.an) > trunk*1.2 && sh.hip.y < Math.max(sh.sh.y, sh.an.y);
+    if(line > 163 && up){ holdSecs += dt; clearCue(); setState("Good line"); if(Math.floor(holdSecs) % 10 === 0 && Math.floor(holdSecs) !== Math.floor(holdSecs - dt) && holdSecs > 1) say(String(Math.floor(holdSecs))); }
+    else if(line > 140){ cue("sag", "Lift your hips into a straight line.", 8000); setState("Hips sagging"); }
+    else setState("Get into position");
+    updCount();
+  }
+  if(ex === "birddog"){
+    const other = sd === "l" ? "r" : "l";
+    const legs = ["l","r"].map(s=>({hip:P(lm, s==="l"?L.lHip:L.rHip), kn:P(lm, s==="l"?L.lKn:L.rKn), an:P(lm, s==="l"?L.lAn:L.rAn)}));
+    const ext = legs.map(g=>ang(g.hip, g.kn, g.an));
+    const i = ext[0] > ext[1] ? 0 : 1, g = legs[i];
+    const rise = sm("rise", (g.hip.y - g.an.y)/trunk);
+    const extended = ext[i] > 150 && Math.abs(g.an.x - g.hip.x) > trunk*.6;
+    if(extended && rise > -.25 && rise < .2){ holdSecs += dt; clearCue(); setState("Good reach"); }
+    else if(extended && rise >= .2){ cue("high", "Reach long, not high. Lower the leg a little.", 8000); setState("Leg too high"); }
+    else setState("Reach an arm and the opposite leg");
+    const tilt = sm("tilt", Math.atan2(Math.abs(p.sh.y - p.hip.y), Math.abs(p.sh.x - p.hip.x))*180/Math.PI);
+    if(extended && tilt > 25) cue("tilt","Keep your back flat, like a tabletop.", 12000);
+    updCount();
+  }
+}
+
+/* ---------- camera + model ---------- */
+let landmarker = null, stream = null, running = false, raf = 0;
+const vid = document.getElementById("vid"), ov = document.getElementById("ov"), ctx = ov.getContext("2d");
+async function loadModel(){
+  if(landmarker) return landmarker;
+  const files = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
+  const opts = m=>({baseOptions:{modelAssetPath:"https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task", delegate:m}, runningMode:"VIDEO", numPoses:1, minPoseDetectionConfidence:.5, minPosePresenceConfidence:.5, minTrackingConfidence:.5});
+  try{ landmarker = await PoseLandmarker.createFromOptions(files, opts("GPU")); }
+  catch(e){ landmarker = await PoseLandmarker.createFromOptions(files, opts("CPU")); }
+  return landmarker;
+}
+async function start(){
+  if(window.speechSynthesis){ speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(" "); u.volume = 0; speechSynthesis.speak(u); }
+  const status = document.getElementById("status");
+  document.getElementById("live").classList.add("on"); document.getElementById("setup").style.display = "none";
+  document.getElementById("exName").textContent = EXS[ex].name;
+  reps = 0; holdSecs = 0; phase = "top"; sets = []; flags = {}; for(const k in ema) delete ema[k]; updCount();
+  vid.classList.toggle("mirror", facing === "user"); ov.classList.toggle("mirror", facing === "user");
+  if(!window.isSecureContext || !navigator.mediaDevices){ status.textContent = "The camera needs this page to be opened over https (or localhost)."; return; }
+  status.textContent = "Starting camera…";
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:facing, width:{ideal:1280}, height:{ideal:720}}, audio:false});
+  }catch(e){ status.textContent = "Camera access was blocked. Allow camera access for this page and try again."; return; }
+  vid.srcObject = stream; await vid.play();
+  status.textContent = "Loading pose model…";
+  try{ await loadModel(); }catch(e){ status.textContent = "Couldn't load the pose model. Check your connection."; return; }
+  status.textContent = ""; document.getElementById("stateLbl").textContent = "Step into frame";
+  say(`${EXS[ex].name}. ${EXS[ex].place}`);
+  running = true; lastT = 0; loop();
+}
+function stop(){
+  running = false; cancelAnimationFrame(raf);
+  if(stream){ stream.getTracks().forEach(t=>t.stop()); stream = null; }
+  if(window.speechSynthesis) speechSynthesis.cancel();
+}
+let lastVideoTime = -1;
+function loop(){
+  if(!running) return;
+  raf = requestAnimationFrame(loop);
+  if(vid.readyState < 2 || vid.currentTime === lastVideoTime) return;
+  lastVideoTime = vid.currentTime;
+  W = vid.videoWidth; H = vid.videoHeight;
+  if(ov.width !== W){ ov.width = W; ov.height = H; }
+  const t = performance.now();
+  const res = landmarker.detectForVideo(vid, t);
+  ctx.clearRect(0,0,W,H);
+  const lm = res.landmarks && res.landmarks[0];
+  if(!lm){ if(t - lastSeen > 2500) { document.getElementById("stateLbl").textContent = "No one in frame"; } return; }
+  lastSeen = t;
+  draw(lm);
+  if(!visibleEnough(lm)){ document.getElementById("stateLbl").textContent = "Whole body not in frame"; cue("frame", "Step back so your whole body is in the frame.", 10000); return; }
+  analyze(lm, t);
+}
+function draw(lm){
+  ctx.lineWidth = Math.max(3, W/220); ctx.lineCap = "round"; ctx.strokeStyle = "rgba(255,255,255,.9)"; ctx.fillStyle = "#fff";
+  const vis = i=>(lm[i].visibility ?? 1) > .5;
+  EDGES.forEach(([a,b])=>{ if(!vis(a) || !vis(b)) return; ctx.beginPath(); ctx.moveTo(lm[a].x*W, lm[a].y*H); ctx.lineTo(lm[b].x*W, lm[b].y*H); ctx.stroke(); });
+  [11,12,13,14,15,16,23,24,25,26,27,28].forEach(i=>{ if(!vis(i)) return; ctx.beginPath(); ctx.arc(lm[i].x*W, lm[i].y*H, ctx.lineWidth*1.6, 0, Math.PI*2); ctx.fill(); });
+}
+function end(){
+  if(reps || holdSecs > 1) sets.push(EXS[ex].kind === "hold" ? `${Math.round(holdSecs)} s` : `${reps} reps`);
+  stop();
+  document.getElementById("live").classList.remove("on");
+  document.getElementById("sum").classList.add("on");
+  document.getElementById("sumSub").textContent = EXS[ex].name;
+  const names = {lean:"Torso leaning", tempo:"Lowering too fast", knee:"Hinge turning into a squat", neck:"Head out of line", deep:"Going too deep", arch:"Arching past straight", level:"Hips uneven", sag:"Hips sagging", high:"Leg lifted too high", tilt:"Back not flat", frame:"Out of frame"};
+  const rows = sets.map((s,i)=>`<div class="row"><b>Set ${i+1}</b><span>${s}</span></div>`).join("") + Object.entries(flags).map(([k,n])=>`<div class="row"><b>${names[k]||k}</b><span>${n} cue${n>1?"s":""}</span></div>`).join("");
+  document.getElementById("sumRows").innerHTML = rows || `<div class="row"><b>No reps recorded</b><span></span></div>`;
+}
+document.getElementById("go").onclick = start;
+document.getElementById("endBtn").onclick = end;
+document.getElementById("resetBtn").onclick = ()=>{ resetSet(); say("New set."); };
+document.getElementById("voiceBtn").onclick = e=>{ voiceOn = !voiceOn; e.target.textContent = voiceOn ? "Voice on" : "Voice off"; if(!voiceOn) speechSynthesis.cancel(); };
+document.getElementById("again").onclick = ()=>{ document.getElementById("sum").classList.remove("on"); document.getElementById("setup").style.display = ""; };
+</script>
+</body>
+</html>
