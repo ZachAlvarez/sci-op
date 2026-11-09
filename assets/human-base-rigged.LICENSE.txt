@@ -1,0 +1,12 @@
+human-base-rigged.glb
+Source: Innerscene, from MakeHuman/MPFB body and rig assets.
+Source page: https://www.innerscene.com/tools/library/3d-parts/human-base-mesh-with-editable-53-bone-rig-8e7c8ab1
+Downloaded: 2026-11-09
+License: CC0 1.0 Universal (public domain dedication)
+License URL: https://creativecommons.org/publicdomain/zero/1.0/
+
+The source page states: "Built by Innerscene from MakeHuman/MPFB CC0 body,
+rig and skin assets; released CC0."
+
+Runtime adaptation in Sci-Op adds non-deforming terminal markers and matte
+vertex colors. No claim of clinical or biomechanical validation is made.

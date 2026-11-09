@@ -36,4 +36,7 @@ for (const file of files) {
   totalScripts += validateScripts(file, html);
 }
 
+// The optional figure study has a standalone classic script.
+new Function(await readFile("figure-preview.js", "utf8"));
+
 console.log(`Validated ${files.length} HTML files and ${totalScripts} executable inline scripts.`);

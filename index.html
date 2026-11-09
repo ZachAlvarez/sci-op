@@ -4090,6 +4090,25 @@ const P3 = {
   B:{trunk:78, thN:-62, shN:-116, thF:-114, shF:-162, ftF:-170, uaN:[-10,-4], faN:[-2,-8], hdN:[-2,-8], uaF:[-14,4], faF:[-6,-4]}}
 };
 
+// Human proportions need their own contacts and presentation. Keep the
+// original demonstration specs available for comparison.
+const HUMAN_P3 = JSON.parse(JSON.stringify(P3));
+for(const [id,cfg] of Object.entries(HUMAN_P3)) cfg.id = id;
+for(const id of ["curl","bird","glide","calf","bridge","deadbug","hinge","rdl","split","slbridge"]) HUMAN_P3[id].view = "side";
+for(const id of ["calf","goblet","row","hinge","rdl","pullapart"]) HUMAN_P3[id].pin = ["aN","aF"];
+HUMAN_P3.split.pin = ["aN","aF"];
+HUMAN_P3.slack.pin = ["aN"];
+HUMAN_P3.slsquat.pin = ["aN"];
+HUMAN_P3.glide.root = [0,.535];
+HUMAN_P3.row.A.head = HUMAN_P3.row.B.head = 36;
+HUMAN_P3.bird.A.head = HUMAN_P3.bird.B.head = 6;
+HUMAN_P3.pullapart.A.uaN = [0,87]; HUMAN_P3.pullapart.A.uaF = [180,87];
+// Keep the hanging wrists in line with the forearms rather than retaining
+// the old mannequin's hand splay.
+for(const id of ["row","rdl","press"]) for(const pose of [HUMAN_P3[id].A,HUMAN_P3[id].B]){
+  pose.hdN = pose.faN; pose.hdF = pose.faF || pose.faN;
+}
+
 const DOSE = {
  walk:{type:"timed", secs:600},
  curl:{type:"hold", holds:5, secs:10, rest:4, midNote:"Switch the bent leg."},
@@ -4152,6 +4171,8 @@ const V3_3D = (function(){
   const floorMesh = new T.Mesh(new T.PlaneGeometry(60,60), shadowMat);
   floorMesh.rotation.x = -Math.PI/2; floorMesh.receiveShadow = true; scene.add(floorMesh);
 
+  const humanRequested = new URLSearchParams(location.search).get("figure") === "human";
+  let humanFigure = false;
   const skinMat = new T.MeshPhysicalMaterial({color:0xffffff, vertexColors:true, roughness:.3, metalness:0, clearcoat:.9, clearcoatRoughness:.18, skinning:true});
   const jointMat = new T.MeshPhysicalMaterial({color:0x2a2c31, roughness:.4, metalness:.2, clearcoat:.5, clearcoatRoughness:.3, skinning:true});
   const pm = (c,o)=>new T.MeshStandardMaterial(Object.assign({color:c, roughness:.55, metalness:0}, o||{}));
@@ -4165,11 +4186,30 @@ const V3_3D = (function(){
   const sphGeo = new T.SphereGeometry(1,24,16), cylGeo = new T.CylinderGeometry(1,1,1,20), wGeo = new T.CylinderGeometry(.056,.056,.06,28);
 
   let model = null, bones = {}, rest = {}, baseY = 0, mixer = null, clips = {}, restBasisInv = new T.Matrix4(), footPitch = -.68;
-  let loaded = false; const readyCbs = [];
+  let loaded = false; const readyCbs = [], fingerRest = [];
   const V = (x,y,z)=>new T.Vector3(x,y,z||0);
   const tmpQ = new T.Quaternion(), tmpV = new T.Vector3();
 
   function loadModel(){
+    if(humanRequested){
+      const controller = new AbortController();
+      const timeout = setTimeout(()=>controller.abort(), 12000);
+      fetch("assets/human-base-rigged.glb", {signal:controller.signal})
+        .then(r=>{ if(!r.ok) throw new Error("Human figure unavailable"); return r.arrayBuffer(); })
+        .then(buffer=>new Promise((resolve,reject)=>new T.GLTFLoader().parse(buffer,"",resolve,reject)))
+        .then(g=>{
+          humanFigure = true;
+          try { setup(g); }
+          catch(e){ scene.remove(g.scene); bones = {}; rest = {}; humanFigure = false; throw e; }
+          loaded = true; readyCbs.splice(0).forEach(f=>f());
+        })
+        .catch(e=>{ console.warn("Human figure could not load; using original figure.", e); loadEmbeddedModel(); })
+        .finally(()=>clearTimeout(timeout));
+      return;
+    }
+    loadEmbeddedModel();
+  }
+  function loadEmbeddedModel(){
     try{
       const b64 = document.getElementById("xbot-data").textContent.trim();
       const bin = atob(b64), buf = new Uint8Array(bin.length);
@@ -4179,21 +4219,42 @@ const V3_3D = (function(){
   }
   function setup(g){
     model = g.scene; scene.add(model);
+    fingerRest.length = 0;
     const raw = {}, meshes = [];
     model.traverse(o=>{
       if(o.isMesh){ o.castShadow = true; o.frustumCulled = false; o.material = skinMat; meshes.push(o); }
       if(o.isBone) raw[o.name] = o;
     });
+    if(humanFigure){
+      // End markers are used by the existing animation solver but carry no skin weights.
+      const end = (name, parent, length)=>{
+        if(raw[name]) return;
+        if(!raw[parent]) throw new Error("Missing rig bone: " + parent);
+        const bone = new T.Bone(); bone.name = name; bone.position.y = length;
+        raw[parent].add(bone); raw[name] = bone;
+      };
+      end("head_leaf", "head", .16);
+      ["l","r"].forEach(s=>{ end("middle_04_leaf_"+s,"middle_03_"+s,.025); end("ball_leaf_"+s,"ball_"+s,.065); });
+    }
     const MAP = {Hips:"pelvis", Spine:"spine_01", Spine1:"spine_02", Spine2:"spine_03", Neck:"neck_01", Head:"head", HeadTop_End:"head_leaf"};
     [["Left","l"],["Right","r"]].forEach(([S,x])=>Object.assign(MAP, {[S+"Shoulder"]:"clavicle_"+x, [S+"Arm"]:"upperarm_"+x, [S+"ForeArm"]:"lowerarm_"+x, [S+"Hand"]:"hand_"+x,
       [S+"HandMiddle1"]:"middle_01_"+x, [S+"HandMiddle4"]:"middle_04_leaf_"+x, [S+"UpLeg"]:"thigh_"+x, [S+"Leg"]:"calf_"+x, [S+"Foot"]:"foot_"+x, [S+"ToeBase"]:"ball_"+x, [S+"Toe_End"]:"ball_leaf_"+x}));
+    if(humanFigure) [["Left","l"],["Right","r"]].forEach(([s,x])=>{
+      MAP[s+"HandIndex1"] = "index_01_"+x; MAP[s+"HandPinky1"] = "pinky_01_"+x;
+    });
     Object.entries(MAP).forEach(([k,v])=>{ if(raw[v]) bones[k] = raw[v]; });
+    if(humanFigure) for(const side of ["l","r"]) for(const finger of ["index","middle","ring","pinky","thumb"]){
+      const chain = [1,2,3].map(i=>raw[`${finger}_0${i}_${side}`]);
+      fingerRest.push({name:finger,side:side === "l" ? "Left" : "Right",chain,quats:chain.map(b=>b.quaternion.clone())});
+    }
     model.updateMatrixWorld(true);
     const bb = new T.Box3(); meshes.forEach(m=>{ const g2 = m.geometry; g2.computeBoundingBox(); bb.union(g2.boundingBox.clone().applyMatrix4(m.matrixWorld)); });
     model.scale.multiplyScalar(1.78/(bb.max.y - bb.min.y)); model.updateMatrixWorld(true);
     const bb2 = new T.Box3(); meshes.forEach(m=>bb2.union(m.geometry.boundingBox.clone().applyMatrix4(m.matrixWorld)));
     baseY = -bb2.min.y; model.position.y = baseY; model.updateMatrixWorld(true);
-    meshes.forEach(m=>{ if(m.isSkinnedMesh) paintShell(m); });
+    skinMat.roughness = humanFigure ? .82 : .3;
+    skinMat.clearcoat = humanFigure ? 0 : .9;
+    meshes.forEach(m=>{ if(m.isSkinnedMesh) humanFigure ? paintHuman(m) : paintShell(m); });
     const wp = n=>bones[n].getWorldPosition(new T.Vector3());
     Object.values(bones).forEach(b=>{ b.userData.q0 = b.quaternion.clone(); b.userData.p0 = b.position.clone(); });
     Object.keys(bones).forEach(n=>{ rest[n] = {wq:bones[n].getWorldQuaternion(new T.Quaternion()), wp:wp(n)}; });
@@ -4223,8 +4284,27 @@ const V3_3D = (function(){
     }
     g.setAttribute("color", new T.BufferAttribute(col, 3));
   }
+  function paintHuman(mesh){
+    // A matte study figure with opaque, color-blocked training shorts.
+    // Color does not represent muscles, tissue boundaries or activation.
+    const g = mesh.geometry, positions = g.attributes.position;
+    const colors = new Float32Array(positions.count*3);
+    const skin = new T.Color(0xc6a58b).convertSRGBToLinear(), shorts = new T.Color(0x283c4a).convertSRGBToLinear(), c = new T.Color();
+    const hip = bones.LeftUpLeg.getWorldPosition(new T.Vector3());
+    const knee = bones.LeftLeg.getWorldPosition(new T.Vector3());
+    const top = hip.y + .10, bottom = hip.y - (hip.y-knee.y)*.42;
+    const p = new T.Vector3();
+    for(let i=0;i<positions.count;i++){
+      p.fromBufferAttribute(positions,i).applyMatrix4(mesh.matrixWorld);
+      const clothed = p.y < top && p.y > bottom && Math.abs(p.x) < .24;
+      c.copy(clothed ? shorts : skin);
+      colors[i*3] = c.r; colors[i*3+1] = c.g; colors[i*3+2] = c.b;
+    }
+    g.setAttribute("color",new T.BufferAttribute(colors,3));
+  }
   /* ---- rig helpers ---- */
   function resetRig(){
+    for(const finger of fingerRest) finger.chain.forEach((b,i)=>b.quaternion.copy(finger.quats[i]));
     for(const b of Object.values(bones)){ b.quaternion.copy(b.userData.q0); b.position.copy(b.userData.p0); }
     model.rotation.set(0,0,0); model.position.set(0,baseY,0); model.updateMatrixWorld(true);
   }
@@ -4249,7 +4329,7 @@ const V3_3D = (function(){
   }
   function aimAt(bone, child, target){ aimDir(bone, child, target.clone().sub(bone.getWorldPosition(new T.Vector3()))); }
   function wpos(n){ return bones[n].getWorldPosition(new T.Vector3()); }
-  function ik2(b1, b2, b3, l1, l2, target, pole){
+  function ik2(b1, b2, b3, l1, l2, target, pole, alignBend = false){
     const A = wpos(b1);
     const d = target.clone().sub(A); let dist = d.length(); const dn = d.normalize();
     dist = Math.min(Math.max(dist, Math.abs(l1-l2)+1e-3), (l1+l2)*.9995);
@@ -4258,15 +4338,104 @@ const V3_3D = (function(){
     if(pv.lengthSq() < 1e-8) pv.set(0,1,0).addScaledVector(dn, -dn.y);
     pv.normalize();
     const knee = A.clone().addScaledVector(dn, l1*cosA).addScaledVector(pv, l1*Math.sin(Math.acos(cosA)));
+    if(alignBend){
+      // Preserve the bind-pose elbow hinge plane, including upper-arm roll.
+      const from = rest[b2].wp.clone().sub(rest[b1].wp).normalize();
+      const fromNormal = from.clone().cross(rest[b3].wp.clone().sub(rest[b2].wp)).normalize();
+      const to = knee.clone().sub(A).normalize();
+      const toNormal = to.clone().cross(target.clone().sub(knee)).normalize();
+      if(fromNormal.lengthSq() > .5 && toNormal.lengthSq() > .5){
+        const a = new T.Matrix4().makeBasis(from,fromNormal,from.clone().cross(fromNormal));
+        const b = new T.Matrix4().makeBasis(to,toNormal,to.clone().cross(toNormal));
+        const rotation = new T.Quaternion().setFromRotationMatrix(b.multiply(a.invert()));
+        setWorldQuat(bones[b1],rotation.multiply(rest[b1].wq));
+      }
+    }
     aimAt(bones[b1], bones[b2], knee);
     aimAt(bones[b2], bones[b3], A.clone().addScaledVector(dn, dist));
   }
-  function aimFoot(side, heading){
+  function orientHand(side, heading, palmNormal, flex = 0){
+    heading = heading.clone().normalize();
+    palmNormal = palmNormal.clone().addScaledVector(heading,-palmNormal.dot(heading));
+    if(palmNormal.lengthSq() < 1e-6) palmNormal = V(0,0,1).addScaledVector(heading,-heading.z);
+    if(palmNormal.lengthSq() < 1e-6) palmNormal = V(1,0,0).addScaledVector(heading,-heading.x);
+    palmNormal.normalize();
+    const forward = rest[side+"HandMiddle1"].wp.clone().sub(rest[side+"Hand"].wp).normalize();
+    const across = rest[side+"HandIndex1"].wp.clone().sub(rest[side+"HandPinky1"].wp);
+    const normal = forward.clone().cross(across).normalize().multiplyScalar(side === "Right" ? -1 : 1);
+    const bind = new T.Matrix4().makeBasis(forward,normal,forward.clone().cross(normal));
+    const target = new T.Matrix4().makeBasis(heading,palmNormal,heading.clone().cross(palmNormal));
+    const q = new T.Quaternion().setFromRotationMatrix(target.multiply(bind.invert()));
+    setWorldQuat(bones[side+"Hand"],q.multiply(rest[side+"Hand"].wq));
+    // The source hand has relaxed, curved fingers. A supporting hand needs
+    // extended fingers; rotating the wrist alone leaves them below the mat.
+    for(const finger of fingerRest.filter(f=>f.side === side && f.name !== "thumb")){
+      const directions = [50,105,145].map(angle=>heading.clone().multiplyScalar(Math.cos(angle*D2R*flex)).addScaledVector(palmNormal,Math.sin(angle*D2R*flex)));
+      aimDir(finger.chain[0],finger.chain[1],directions[0]);
+      aimDir(finger.chain[1],finger.chain[2],directions[1]);
+      const tip = finger.chain[2], world = tip.getWorldQuaternion(new T.Quaternion());
+      const direction = V(0,1,0).applyQuaternion(world);
+      setWorldQuat(tip,new T.Quaternion().setFromUnitVectors(direction,directions[2]).multiply(world));
+    }
+    const thumb = fingerRest.find(f=>f.side === side && f.name === "thumb");
+    if(flex > .5){
+      const center = wpos(side+"Hand").addScaledVector(heading,.09).addScaledVector(palmNormal,.03);
+      aimAt(thumb.chain[0],thumb.chain[1],center);
+      aimAt(thumb.chain[1],thumb.chain[2],center.clone().addScaledVector(heading,.025));
+    } else if(flex === 0){
+      // Spread a resting thumb in the palm plane instead of leaving the
+      // source mesh's relaxed thumb curled through a supporting surface.
+      const direction = thumb.chain[2].getWorldPosition(new T.Vector3()).sub(thumb.chain[0].getWorldPosition(new T.Vector3()));
+      direction.addScaledVector(palmNormal,-direction.dot(palmNormal)).normalize();
+      aimDir(thumb.chain[0],thumb.chain[1],direction);
+      aimDir(thumb.chain[1],thumb.chain[2],direction);
+    }
+  }
+  function plantPalm(side){ orientHand(side,V(1,0,0),V(0,-1,0)); }
+  function aimLimb(side, first, second, end, upper, lower){
+    const a = side+first, b = side+second, c = side+end;
+    const from = rest[b].wp.clone().sub(rest[a].wp).normalize();
+    let normal = from.clone().cross(rest[c].wp.clone().sub(rest[b].wp)).normalize();
+    const targetNormal = upper.clone().cross(lower), bend = targetNormal.length();
+    // Near a straight joint the cross product loses its direction and can
+    // flip the skin 180 degrees. Carry the exercise's stronger bend plane
+    // through extension, blending into the measured plane as it bends.
+    const keys = first === "Arm" ? ["ua","fa"] : ["th","sh"];
+    const aNormal = PA[side][keys[0]].clone().cross(PA[side][keys[1]]);
+    const bNormal = PB[side][keys[0]].clone().cross(PB[side][keys[1]]);
+    const useA = aNormal.lengthSq() > bNormal.lengthSq();
+    const reference = useA ? aNormal : bNormal;
+    if(reference.lengthSq() >= 1e-6) reference.applyQuaternion(new T.Quaternion().setFromUnitVectors((useA ? PA : PB)[side][keys[0]],upper));
+    else reference.copy(curFwd).cross(upper);
+    reference.addScaledVector(upper,-reference.dot(upper));
+    if(reference.lengthSq() < 1e-6) reference.copy(V(0,0,1)).addScaledVector(upper,-upper.z);
+    reference.normalize();
+    if(bend > 1e-6){
+      targetNormal.normalize();
+      if(targetNormal.dot(reference) < 0) targetNormal.negate();
+      const weight = Math.min(1,bend/.18);
+      targetNormal.copy(reference.lerp(targetNormal,weight*weight*(3-2*weight)).normalize());
+    } else targetNormal.copy(reference);
+    if(targetNormal.lengthSq() > .5 && normal.lengthSq() > .5){
+      const bind = new T.Matrix4().makeBasis(from,normal,from.clone().cross(normal));
+      const target = new T.Matrix4().makeBasis(upper,targetNormal,upper.clone().cross(targetNormal));
+      setWorldQuat(bones[a],new T.Quaternion().setFromRotationMatrix(target.multiply(bind.invert())).multiply(rest[a].wq));
+    }
+    aimDir(bones[a],bones[b],upper); aimDir(bones[b],bones[c],lower);
+  }
+  function aimFoot(side, heading, soleUp = V(0,1,0)){
     const h = heading.clone().normalize();
-    const n = V(0,1,0).addScaledVector(h, -h.y); if(n.lengthSq() < .04){ n.copy(curFwd); n.addScaledVector(h, -n.dot(h)); }
+    const n = soleUp.clone().addScaledVector(h, -soleUp.dot(h)); if(n.lengthSq() < .04){ n.copy(curFwd); n.addScaledVector(h, -n.dot(h)); }
     n.normalize();
     const dir = h.clone().multiplyScalar(Math.cos(footPitch)).addScaledVector(n, Math.sin(footPitch));
-    aimDir(bones[side+"Foot"], bones[side+"ToeBase"], dir);
+    if(humanFigure){
+      const from = rest[side+"ToeBase"].wp.clone().sub(rest[side+"Foot"].wp).normalize();
+      const fromUp = V(0,1,0).addScaledVector(from,-from.y).normalize();
+      const toUp = soleUp.clone().addScaledVector(dir,-soleUp.dot(dir)).normalize();
+      const bind = new T.Matrix4().makeBasis(from,fromUp,from.clone().cross(fromUp));
+      const target = new T.Matrix4().makeBasis(dir,toUp,dir.clone().cross(toUp));
+      setWorldQuat(bones[side+"Foot"],new T.Quaternion().setFromRotationMatrix(target.multiply(bind.invert())).multiply(rest[side+"Foot"].wq));
+    } else aimDir(bones[side+"Foot"], bones[side+"ToeBase"], dir);
   }
 
   /* ---- spec -> vectors ---- */
@@ -4332,6 +4501,12 @@ const V3_3D = (function(){
     const P = {trunk:mix(F[i0].trunk,F[i1].trunk), chest:mix(F[i0].chest,F[i1].chest), head:mix(F[i0].head,F[i1].head), root:null};
     [["Right","Right"],["Left","Left"]].forEach(([src])=>{ const dst = mirror ? (src === "Right" ? "Left" : "Right") : src; P[dst] = {};
       LIMBS.forEach(l=>P[dst][l] = mix(F[i0][src][l], F[i1][src][l])); });
+    if(humanFigure) for(const side of ["Left","Right"]){
+      // The source clip's toe vector occasionally reverses during toe-off.
+      // Retarget a forward-facing foot with a bounded sagittal pitch.
+      const ft = P[side].ft, pitch = Math.max(-.5,Math.min(.4,Math.atan2(ft.y,Math.abs(ft.x))));
+      P[side].ft = V(Math.cos(pitch),Math.sin(pitch),0);
+    }
     return P;
   }
   /* ---- pose application ---- */
@@ -4367,12 +4542,28 @@ const V3_3D = (function(){
     setWorldQuat(bones.Head, Qhd.clone().multiply(rest.Head.wq));
     ["Right","Left"].forEach(s=>{
       const L = P[s];
-      aimDir(bones[s+"Arm"], bones[s+"ForeArm"], L.ua);
-      aimDir(bones[s+"ForeArm"], bones[s+"Hand"], L.fa);
+      if(humanFigure) aimLimb(s,"Arm","ForeArm","Hand",L.ua,L.fa);
+      else { aimDir(bones[s+"Arm"], bones[s+"ForeArm"], L.ua); aimDir(bones[s+"ForeArm"], bones[s+"Hand"], L.fa); }
       aimDir(bones[s+"Hand"], bones[s+"HandMiddle1"], L.hd);
-      aimDir(bones[s+"UpLeg"], bones[s+"Leg"], L.th);
-      aimDir(bones[s+"Leg"], bones[s+"Foot"], L.sh);
-      aimFoot(s, L.ft);
+      if(humanFigure) aimLimb(s,"UpLeg","Leg","Foot",L.th,L.sh);
+      else { aimDir(bones[s+"UpLeg"], bones[s+"Leg"], L.th); aimDir(bones[s+"Leg"], bones[s+"Foot"], L.sh); }
+      const sidePlank = humanFigure && ["sideK","sideF"].includes(cfg.id);
+      aimFoot(s, L.ft,sidePlank ? L.sh.clone().negate() : V(0,1,0));
+      if(humanFigure){
+        const lat = wpos("LeftUpLeg").sub(wpos("RightUpLeg")).normalize();
+        const inward = lat.multiplyScalar(s === "Right" ? 1 : -1);
+        const onMat = ["bridge","slbridge","curl"].includes(cfg.id);
+        const supportSide = s === (mirror ? "Left" : "Right");
+        if(onMat) orientHand(s,L.hd,V(0,cfg.id === "curl" ? 1 : -1,0));
+        else if(sidePlank && supportSide) orientHand(s,L.fa,V(0,-1,0));
+        else if(cfg.id === "bird"){
+          if(supportSide) plantPalm(s);
+          else orientHand(s,L.hd,V(0,-1,0),.65*Math.max(0,L.fa.x));
+        }
+        else if(cfg.id === "deadbug") orientHand(s,L.fa,inward);
+        else if(cfg.db || (cfg.band && cfg.band !== "knees")) orientHand(s,L.fa,inward,cfg.db === "center" ? .65 : .9);
+        else orientHand(s,L.fa,inward,.12);
+      }
     });
     // root placement
     const shift = new T.Vector3();
@@ -4385,6 +4576,7 @@ const V3_3D = (function(){
       const skip = (cfg.groundSkip||[]).slice();
       (cfg.pin||[]).forEach(p=>{ const side = (p.startsWith("wF") || p.endsWith("F")) ? (mirror ? "Right" : "Left") : (mirror ? "Left" : "Right");
         if(p[0] === "a") skip.push(side+"Leg", side+"Foot", side+"Toe"); else skip.push(side+"Hand", side+"ForeArm"); });
+      if(humanFigure && !(cfg.props||[]).includes("mat")) skip.length = 0;
       shift.set(-a.x, (cfg.floor||0) - lowestY(skip), 0);
       const pm = wpos("LeftUpLeg").lerp(wpos("RightUpLeg"), .5); shift.z = -pm.z;
     }
@@ -4403,7 +4595,12 @@ const V3_3D = (function(){
         ik2(side+"UpLeg", side+"Leg", side+"Foot", rest[side+"UpLeg"].len, rest[side+"Leg"].len, t, wpos(side+"Leg"));
         if(heading) aimFoot(side, heading);
       } else if(p[0] === "w"){
-        ik2(side+"Arm", side+"ForeArm", side+"Hand", rest[side+"Arm"].len, rest[side+"ForeArm"].len, t, wpos(side+"ForeArm"));
+        const floorSupport = humanFigure && cfg.id === "bird";
+        // A supporting elbow points toward the feet, never the head. Using
+        // the transient elbow itself as the pole flips near full extension.
+        const pole = floorSupport ? t.clone().add(V(-1,0,0)) : wpos(side+"ForeArm");
+        ik2(side+"Arm", side+"ForeArm", side+"Hand", rest[side+"Arm"].len, rest[side+"ForeArm"].len, t, pole, floorSupport);
+        if(floorSupport) plantPalm(side);
       }
     });
   }
@@ -4430,7 +4627,7 @@ const V3_3D = (function(){
         const m = rounded(x1-x0, .62, .012, .04, M.mat); m.rotation.x = -Math.PI/2; m.position.set((x0+x1)/2, .006, 0); m.receiveShadow = true; m.castShadow = false; propG.add(m);
       }
       if(p === "seat"){
-        const pm = wpos("LeftUpLeg").lerp(wpos("RightUpLeg"), .5), top = .46;
+        const pm = wpos("LeftUpLeg").lerp(wpos("RightUpLeg"), .5), top = humanFigure ? pm.y-.085 : .46;
         const pad = rounded(.95, .32, .06, .03, M.pad); pad.rotation.x = -Math.PI/2; pad.position.set(pm.x-.2, top-.03, 0); propG.add(pad);
         [pm.x-.58, pm.x+.18].forEach(x=>{ box(.05, top-.06, .26, M.frame, V(x, (top-.06)/2, 0)); box(.05,.02,.36,M.frame,V(x,.01,0)); });
       }
@@ -4478,10 +4675,20 @@ const V3_3D = (function(){
       [-.09,.09].forEach(y=>{ const w = new T.Mesh(wGeo, M.iron); w.position.y = y; w.castShadow = true; g.add(w); });
       g.position.copy(pos); g.quaternion.setFromUnitVectors(V(0,1,0), axis.clone().normalize()); attach.add(g); };
     if(cfg.db === "center") db(palm("Left").lerp(palm("Right"),.5).add(V(0,-.03,0)), V(0,1,0));
-    if(cfg.db === "near") db(palm(nearSide), lat);
-    if(cfg.db === "both"){ db(palm("Left"), lat); db(palm("Right"), lat); }
+    const gripAxis = s=>humanFigure ? wpos(s+"HandIndex1").sub(wpos(s+"HandPinky1")).normalize() : lat;
+    if(cfg.db === "near") db(palm(nearSide), gripAxis(nearSide));
+    if(cfg.db === "both"){ db(palm("Left"), gripAxis("Left")); db(palm("Right"), gripAxis("Right")); }
     if(cfg.band === "hands") cyl(palm("Left"), palm("Right"), .008, M.band, attach);
-    if(cfg.band === "knees"){ const k = s=>wpos(s+"Leg").lerp(wpos(s+"Foot"), .12); cyl(k("Left"), k("Right"), .012, M.band, attach); }
+    if(cfg.band === "knees"){
+      const k = s=>wpos(s+"Leg").lerp(wpos(s+"UpLeg"),humanFigure ? .22 : -.12);
+      if(humanFigure){
+        const left = k("Left"), right = k("Right"), center = left.clone().lerp(right,.5);
+        const width = left.distanceTo(right)/2+.075, lateral = left.clone().sub(right).normalize();
+        const forward = V(0,0,1), points = [];
+        for(let i=0;i<=20;i++){ const a = i*Math.PI*2/20; points.push(center.clone().addScaledVector(lateral,Math.cos(a)*width).addScaledVector(forward,Math.sin(a)*.075)); }
+        for(let i=1;i<points.length;i++) cyl(points[i-1],points[i],.009,M.band,attach);
+      } else cyl(k("Left"),k("Right"),.012,M.band,attach);
+    }
     if(cfg.band === "overhead" && anchors){ cyl(palm("Left"), anchors.L, .007, M.band, attach); cyl(palm("Right"), anchors.R, .007, M.band, attach); }
     if(cfg.band === "forward" && anchors){ cyl(palm(nearSide), anchors.F, .007, M.band, attach); }
     if(cfg.dowel){
@@ -4496,7 +4703,7 @@ const V3_3D = (function(){
 
   /* ---- exercise setup ---- */
   let cur = null, curId = null, curMirror = false, PA = null, PB = null, pinTargets = null, clipAction = null;
-  let showL5 = true;
+  let showL5 = !humanRequested;
   function lagU(state, lag){
     const mj = x => x <= 0 ? 0 : x >= 1 ? 1 : x*x*x*(10 + x*(-15 + 6*x));
     const f = s => mj(Math.min(1, Math.max(0, (s - lag)/(1 - lag))));
@@ -4516,11 +4723,36 @@ const V3_3D = (function(){
     applyPins(cur, curMirror, pinTargets);
     if(cur.step) stepFoot(u.legs);
     if(cur.dowel) dowelHands();
+    if(humanFigure) finishHumanPose(P,u);
+  }
+  function finishHumanPose(P,u){
+    const near = curMirror ? "Left" : "Right", far = curMirror ? "Right" : "Left";
+    if(["bridge","slbridge"].includes(cur.id)) for(const side of ["Left","Right"]){
+      const target = pinTargets.restHands[side];
+      const lateral = side === "Left" ? -1 : 1;
+      ik2(side+"Arm",side+"ForeArm",side+"Hand",rest[side+"Arm"].len,rest[side+"ForeArm"].len,target,target.clone().add(V(0,0,lateral)),true);
+      plantPalm(side);
+    }
+    if(["sideK","sideF"].includes(cur.id)){
+      const ankle = wpos(near+"Foot").add(V(0,.075,0));
+      const knee = wpos(near+"Leg").add(V(0,.075,0));
+      ik2(far+"UpLeg",far+"Leg",far+"Foot",rest[far+"UpLeg"].len,rest[far+"Leg"].len,ankle,knee,true);
+      aimFoot(far,P[far].ft,P[far].sh.clone().negate());
+      const hip = wpos(far+"UpLeg").add(V(0,.075,.035));
+      ik2(far+"Arm",far+"ForeArm",far+"Hand",rest[far+"Arm"].len,rest[far+"ForeArm"].len,hip,wpos(far+"ForeArm").add(V(0,.2,0)),true);
+      orientHand(far,P[far].fa,V(0,-1,0),.1);
+    }
+    if(cur.id === "glide"){
+      // Keep the inactive foot on the floor while the other leg glides.
+      const target = pinTargets.idleFoot;
+      ik2(far+"UpLeg",far+"Leg",far+"Foot",rest[far+"UpLeg"].len,rest[far+"Leg"].len,target,wpos(far+"Leg"),true);
+      aimFoot(far,V(1,0,0));
+    }
   }
   function stepFoot(u){
     // the stepping foot follows its keyframed path sideways, lifts mid-step, and lands on the floor
     const s = curMirror ? "Left" : "Right";
-    const a = wpos(s+"Foot"); a.y = pinTargets.stepY + .06*Math.sin(Math.PI*u);
+    const a = wpos(s+"Foot"); a.y = pinTargets.stepY + (humanFigure ? .035 : .06)*Math.sin(Math.PI*u);
     const heading = new T.Vector3(0,0,1);
     ik2(s+"UpLeg", s+"Leg", s+"Foot", rest[s+"UpLeg"].len, rest[s+"Leg"].len, a, wpos(s+"Leg").add(new T.Vector3(0,0,.3)));
     aimFoot(s, heading);
@@ -4535,13 +4767,23 @@ const V3_3D = (function(){
     const tN = d.lo.clone().addScaledVector(dir, len*.2).addScaledVector(d.back, .02), tF = d.lo.clone().addScaledVector(dir, len*.72).addScaledVector(d.back, .02);
     [[nearSide,tN],[farSide,tF]].forEach(([s,t])=>{
       const pole = wpos(s+"ForeArm");
-      ik2(s+"Arm", s+"ForeArm", s+"Hand", rest[s+"Arm"].len, rest[s+"ForeArm"].len, t.clone().addScaledVector(dir, s===nearSide?-.05:.05).sub(wpos(s+"Hand").sub(palm(s))), pole);
+      if(humanFigure){
+        for(let i=0;i<3;i++){
+          const wrist = t.clone().sub(palm(s).sub(wpos(s+"Hand")));
+          ik2(s+"Arm",s+"ForeArm",s+"Hand",rest[s+"Arm"].len,rest[s+"ForeArm"].len,wrist,pole,true);
+          const heading = wpos(s+"Hand").sub(wpos(s+"ForeArm")).normalize();
+          heading.addScaledVector(dir,-heading.dot(dir)).normalize();
+          const normal = dir.clone().cross(heading).normalize();
+          if(normal.dot(d.back) > 0) normal.negate();
+          orientHand(s,heading,normal,.9);
+        }
+      } else ik2(s+"Arm", s+"ForeArm", s+"Hand", rest[s+"Arm"].len, rest[s+"ForeArm"].len, t.clone().addScaledVector(dir, s===nearSide?-.05:.05).sub(wpos(s+"Hand").sub(palm(s))), pole);
     });
   }
   const bbox = new T.Box3();
   function setExercise(id, mirror){
     if(!loaded) { curId = id; curMirror = !!mirror; return; }
-    cur = P3[id]; curId = id; curMirror = !!mirror;
+    cur = humanFigure ? HUMAN_P3[id] : P3[id]; curId = id; curMirror = !!mirror;
     if(clipAction){ clipAction.stop(); clipAction = null; }
     PA = resolve(cur.A, cur, curMirror); PB = resolve(cur.B || cur.A, cur, curMirror);
     // pose A for pins, props, anchors
@@ -4551,9 +4793,20 @@ const V3_3D = (function(){
     (cur.pin||[]).forEach(p=>{
       const side = (p.startsWith("wF") || p.endsWith("F")) ? farSide : nearSide;
       if(p[0] === "a"){ pinTargets[p] = wpos(side+"Foot"); pinTargets[p+"_h"] = (PA[side].ft).clone(); }
-      if(p[0] === "w") pinTargets[p] = wpos(side+"Hand");
+      if(p[0] === "w"){
+        pinTargets[p] = wpos(side+"Hand");
+        // Mat top plus wrist/hand thickness; contact is at the palm, not
+        // at the wrist's internal joint center.
+        if(humanFigure && cur.id === "bird") pinTargets[p].y = .055;
+      }
     });
     if(cur.step) pinTargets.stepY = wpos(nearSide+"Foot").y;
+    if(humanFigure && cur.step) pinTargets.stepY = wpos(farSide+"Foot").y;
+    if(humanFigure && ["bridge","slbridge"].includes(cur.id)){
+      pinTargets.restHands = {};
+      for(const side of ["Left","Right"]){ const hand = wpos(side+"Hand"); hand.y = .055; pinTargets.restHands[side] = hand; }
+    }
+    if(humanFigure && cur.id === "glide"){ pinTargets.idleFoot = wpos(farSide+"Foot"); pinTargets.idleFoot.y = .09; }
     anchors = null;
     if(cur.band === "overhead") anchors = {L:palm("Left").add(V(.25,1.25,0)), R:palm("Right").add(V(-.25,1.25,0))};
     if(cur.band === "forward") anchors = {F:palm(nearSide).add(V(1.4,1.1,0))};
@@ -4585,7 +4838,9 @@ const V3_3D = (function(){
     const fr = cur && cur.plane === "f";
     const flip = curMirror && cur && cur.plane === "s" ? Math.PI : 0;
     const m = {angle:[fr ? .55 : .72, 1.2], side:[fr ? Math.PI/2 : 0, 1.45], front:[fr ? 0 : Math.PI/2, 1.45], top:[fr ? .25 : .2, .3]};
-    const r = m[v] || m.angle; return [r[0] + (v === "angle" || v === "side" ? flip : 0), r[1]];
+    const r = m[v] || m.angle;
+    if(humanFigure && flip && (v === "angle" || v === "side")) return [Math.PI-r[0],r[1]];
+    return [r[0] + (v === "angle" || v === "side" ? flip : 0), r[1]];
   }
   function setView(v, instant){
     view = v; const [th, ph] = viewAngles(v); tTheta = th; tPhi = ph;
@@ -4622,7 +4877,7 @@ const V3_3D = (function(){
   }
   function renderFrame(dt){
     if(!loaded || !cur) return;
-    clock += dt;
+    if(playing || drive) clock += dt;
     let st, label = "";
     if(clipAction){
       model.rotation.set(0, curMirror ? -Math.PI/2 : Math.PI/2, 0); model.position.set(0, baseY, 0);
@@ -4660,11 +4915,79 @@ const V3_3D = (function(){
   function readTheme(){
     // the stage is a dark studio in both themes
     shadowMat.opacity = .55; hemi.intensity = .5; rim.intensity = 1.5; fill.intensity = .3;
+    if(humanFigure){ shadowMat.opacity = .25; key.intensity = 1.35; rim.intensity = .75; fill.intensity = .5; }
   }
   loadModel();
 
   return {
     is3D:true,
+    get figure(){ return humanFigure ? "human" : "original"; },
+    auditPoses(){
+      if(!loaded) return {error:"Figure not ready"};
+      const previousId = curId, previousMirror = curMirror, previousWalkTime = walkT;
+      const errors = []; let samples = 0, supportSamples = 0;
+      const contacts = {};
+      try {
+        for(const id of Object.keys(P3)) for(const mirror of [false,true]){
+          setExercise(id,mirror);
+          const previousJoints = {};
+          for(let step=0;step<=20;step++){
+            const u = step/20;
+            if(cur.dclip) walkT = WALK.dur*u;
+            poseAt(u === 0 ? {phase:"holdA",s:0} : u === 1 ? {phase:"holdB",s:0} : {phase:"out",s:scrubInv(u)},0);
+            for(const [name,bone] of Object.entries(bones)){
+              if(!bone.matrixWorld.elements.every(Number.isFinite)) errors.push(`${id}/${mirror}/${u}: non-finite ${name}`);
+              if(humanFigure && !cur.dclip && /(?:Arm|ForeArm|UpLeg|Leg)$/.test(name)){
+                const q = bone.getWorldQuaternion(new T.Quaternion());
+                if(previousJoints[name] && previousJoints[name].angleTo(q) > .65) errors.push(`${id}/${mirror}/${u}: abrupt ${name} rotation`);
+                previousJoints[name] = q;
+              }
+            }
+            if(humanFigure){
+              const c = contacts[id] ||= {maxPinError:0,minSupportTip:Infinity};
+              const near = mirror ? "Left" : "Right", far = mirror ? "Right" : "Left";
+              for(const pin of cur.pin || []){
+                const side = pin.endsWith("F") ? far : near;
+                const joint = side+(pin[0] === "a" ? "Foot" : "Hand");
+                c.maxPinError = Math.max(c.maxPinError,wpos(joint).distanceTo(pinTargets[pin]));
+              }
+              const support = ["bridge","slbridge"].includes(id) ? [near,far] : ["bird","sideK","sideF"].includes(id) ? [near] : [];
+              for(const side of support) c.minSupportTip = Math.min(c.minSupportTip,wpos(side+"HandMiddle4").y);
+            }
+            samples++;
+          }
+        }
+        if(humanFigure){
+          // Exercise the near-straight arm through the reach and breathing
+          // extremes: these previously selected opposite elbow solutions.
+          for(const mirror of [false,true]){
+            setExercise("bird",mirror);
+            const side = mirror ? "Left" : "Right";
+            for(let step=0;step<=20;step++) for(const time of [0,1/(4*.23),3/(4*.23)]){
+              const u = step/20;
+              poseAt({phase:"out",s:scrubInv(u)},time);
+              const shoulder = wpos(side+"Arm"), elbow = wpos(side+"ForeArm"), wrist = wpos(side+"Hand");
+              const axis = wrist.clone().sub(shoulder).normalize();
+              const bend = elbow.clone().sub(shoulder); bend.addScaledVector(axis,-bend.dot(axis));
+              const forward = wpos(side+"HandMiddle1").sub(wrist).normalize();
+              const across = wpos(side+"HandIndex1").sub(wpos(side+"HandPinky1"));
+              const normal = forward.clone().cross(across).normalize().multiplyScalar(side === "Right" ? -1 : 1);
+              if(bend.x > 1e-5) errors.push(`bird/${mirror}/${u}: reversed support elbow`);
+              if(normal.dot(V(0,-1,0)) < .999) errors.push(`bird/${mirror}/${u}: palm not facing mat`);
+              if(wpos(side+"HandMiddle4").y < .012) errors.push(`bird/${mirror}/${u}: fingertip below mat`);
+              supportSamples++;
+            }
+          }
+        }
+      } finally { walkT = previousWalkTime; if(previousId) setExercise(previousId,previousMirror); }
+      for(const [id,c] of Object.entries(contacts)){
+        c.maxPinError = +c.maxPinError.toFixed(4);
+        c.minSupportTip = Number.isFinite(c.minSupportTip) ? +c.minSupportTip.toFixed(4) : null;
+        if(c.maxPinError > .02) errors.push(`${id}: support moved ${(c.maxPinError*100).toFixed(1)} cm`);
+        if(c.minSupportTip !== null && c.minSupportTip < .012) errors.push(`${id}: fingertip below mat (${c.minSupportTip})`);
+      }
+      return {figure:humanFigure ? "human" : "original",exercises:Object.keys(P3).length,samples,supportSamples,contacts,errors};
+    },
     get loaded(){ return loaded; },
     onReady(f){ if(loaded) f(); else readyCbs.push(f); },
     activeKey:null,
@@ -4712,18 +5035,20 @@ const V3_3D = (function(){
       o.hips = +(wpos("Hips").y-.11).toFixed(3); ["Right","Left"].forEach(s=>{ o[s[0]+"tip"] = +(wpos(s+"HandMiddle4").y-.012).toFixed(3); o[s[0]+"elb"] = +(wpos(s+"ForeArm").y-.045).toFixed(3); o[s[0]+"hipJ"] = +wpos(s+"UpLeg").y.toFixed(3); }); o.head = +(wpos("Head").lerp(wpos("HeadTop_End"),.45).y-.1).toFixed(3); o.back = +(wpos("Spine2").y-.125).toFixed(3); o.low = +lowestY().toFixed(3);
       return o;
     },
-    frames(id, n, w, h){
+    frames(id, n, w, h, mirror = false){
       if(!loaded) return [];
+      const previousRatio = renderer.getPixelRatio();
       const out = []; renderer.setPixelRatio(1); renderer.setSize(w, h, false); camera.aspect = w/h; camera.updateProjectionMatrix(); readTheme();
-      setExercise(id, false);
+      setExercise(id, mirror);
       const [th, ph] = viewAngles(cur.view || "angle"); theta = tTheta = th; phi = tPhi = ph;
       for(let i=0;i<n;i++){
         if(cur.dclip){ walkT = WALK.dur*i/n; poseAt({}, 0); }
         else { const u = i/(n-1); poseAt(u <= 0 ? {phase:"holdA",s:0} : u >= 1 ? {phase:"holdB",s:0} : {phase:"out", s:scrubInv(u)}, i*.25); }
-        const was = showL5; showL5 = false; drawAttachments(cur, false); showL5 = was;
+        const was = showL5; showL5 = false; drawAttachments(cur, mirror); showL5 = was;
         placeCam();
         renderer.render(scene, camera); out.push(canvas.toDataURL("image/png"));
       }
+      renderer.setPixelRatio(previousRatio);
       return out;
     },
     snapshots(ids, w, h){
@@ -5271,10 +5596,14 @@ function runTimer(btn){
 }
 document.addEventListener("visibilitychange", ()=>{ if(!document.hidden && !document.getElementById("guide").hidden && !G.wake){ try{ navigator.wakeLock && navigator.wakeLock.request("screen").then(w=>G.wake=w).catch(()=>{}); }catch(e){} } });
 
-loadLocal();
-renderAll();
-initCloud();
-if(V3) V3.onReady(()=>{ setTimeout(()=>{ try{ THUMBS = V3.snapshots(Object.keys(EX), 144, 108); HERO = (V3.snapshots(["pullapart"], 240, 300) || {}).pullapart || null; renderToday(); renderProgram(); }catch(e){ console.error(e); } }, 50); });
+if(new URLSearchParams(location.search).get("preview") === "figure"){
+  const script = document.createElement("script"); script.src = "figure-preview.js?v=4"; document.body.appendChild(script);
+} else {
+  loadLocal();
+  renderAll();
+  initCloud();
+  if(V3) V3.onReady(()=>{ setTimeout(()=>{ try{ THUMBS = V3.snapshots(Object.keys(EX), 144, 108); HERO = (V3.snapshots(["pullapart"], 240, 300) || {}).pullapart || null; renderToday(); renderProgram(); }catch(e){ console.error(e); } }, 50); });
+}
 </script>
 </body>
 </html>

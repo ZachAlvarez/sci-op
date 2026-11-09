@@ -42,6 +42,20 @@ The tests use Chromium's fake camera and a stubbed MediaPipe module, so they run
 
 The figure is a rigged humanoid driven by hand-keyframed pose specs per exercise, blended with minimum-jerk easing and grounded each frame so feet, hands and knees stay planted. The walk is replayed from motion-capture data. Exercise motions are keyframed demonstrations, not motion capture.
 
+### Human figure prototype
+
+Serve this folder over HTTP (for example, `python -m http.server 8765 --bind 127.0.0.1`), then open `http://127.0.0.1:8765/index.html?preview=figure&figure=human`.
+
+This isolated preview compares a MakeHuman/MPFB-based human with the original figure across all 20 exercises, with playback, scrubbing, side selection, and viewing angles. It does not initialize or save workout progress. The human loads from `assets/human-base-rigged.glb`; if unavailable, the original embedded figure is used and identified in the preview. Normal app URLs keep the original model. Add `?figure=human` to try the new figure in the workout interface.
+
+The prototype adapts a 53-bone rig, adds unweighted terminal markers for the existing solver, and applies matte shading and illustrative training shorts. Human-specific pose settings refine all 20 demonstrations: stable elbow/knee rotation through extension, fixed support feet, flat resting palms, curled equipment grips, stacked side-plank feet, grounded bridge hands, seated foot contact, and forward-facing walking feet. The lateral-walk band wraps above the knees, and dumbbell handles follow the grip orientation. Exercise views expose the movement more clearly on either side.
+
+This is an illustrative rig, not a clinically validated anatomical model or new motion-capture library. Joint centers and surface contacts remain approximations; the checks do not establish safe technique or detect every mesh intersection. Loading the human requires a local/hosted server and the asset file; the original self-contained offline option remains available.
+
+The human bird-dog support arm uses a fixed backward elbow bend direction and a bind-pose hinge plane to avoid elbow flips. Its palm orientation is restored after IK and supporting fingers extend above the mat. Diagnostics also check elbow direction, palm orientation and fingertip-marker clearance across 126 reach/breathing samples on both sides. Paused playback freezes the breathing animation as well as the exercise phase.
+
+Open **Preview diagnostics → Check all exercise poses** to check 840 samples (21 positions × 20 exercises × both sides), including finite transforms, abrupt limb rotations, planted-joint drift (2 cm tolerance), and supporting fingertip clearance. The additional bird-dog checks cover breathing extremes. Use the five visual review groups to inspect start/middle/end contact sheets; **Other side** also controls the sheets. These are renderer regression checks, not biomechanical validation.
+
 ## Limitations
 
 - The form coach sees joints, not spinal curvature, so it cannot detect low-back rounding.
@@ -51,6 +65,7 @@ The figure is a rigged humanoid driven by hand-keyframed pose specs per exercise
 ## Credits
 
 - Figure mesh: CC0 human model from [Mesh2Motion](https://github.com/Mesh2Motion/mesh2motion-app).
+- Human figure prototype: [Innerscene human base with 53-bone rig](https://www.innerscene.com/tools/library/3d-parts/human-base-mesh-with-editable-53-bone-rig-8e7c8ab1), derived from MakeHuman/MPFB, CC0. See `assets/human-base-rigged.LICENSE.txt`.
 - Walk motion capture: Mixamo clip bundled with the three.js `Xbot` example.
 - [three.js](https://threejs.org) r128 (MIT), embedded.
 - [MediaPipe Tasks Vision](https://developers.google.com/mediapipe) (Apache 2.0), loaded from CDN by the form coach.
