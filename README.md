@@ -25,11 +25,11 @@ Progress is stored only in the browser (`localStorage`) when run outside claude.
 npm ci
 npx playwright install chromium   # first time only
 npm run validate                  # every inline script parses
-npm test                          # form-coach camera lifecycle tests
+npm test                          # camera lifecycle tests and the pose audit
 npm run serve                     # local server at http://127.0.0.1:4173
 ```
 
-The tests use Chromium's fake camera and a stubbed MediaPipe module, so they run offline and can simulate slow or failing model loads. They check that the camera is released on End, on page exit, and on load failure, and that ending during startup never starts tracking. CI runs both on every push.
+The tests use Chromium's fake camera and a stubbed MediaPipe module, so they run offline and can simulate slow or failing model loads. They check that the camera is released on End, on page exit, and on load failure, and that ending during startup never starts tracking. The pose audit (below) also runs as a test on both figures, using software WebGL. CI runs everything on every push.
 
 ## Features
 
@@ -48,13 +48,13 @@ Serve this folder over HTTP (for example, `python -m http.server 8765 --bind 127
 
 This isolated preview compares a MakeHuman/MPFB-based human with the original figure across all 20 exercises, with playback, scrubbing, side selection, and viewing angles. It does not initialize or save workout progress. The human loads from `assets/human-base-rigged.glb`; if unavailable, the original embedded figure is used and identified in the preview. Normal app URLs keep the original model. Add `?figure=human` to try the new figure in the workout interface.
 
-The prototype adapts a 53-bone rig, adds unweighted terminal markers for the existing solver, and applies matte shading and illustrative training shorts. Human-specific pose settings refine all 20 demonstrations: stable elbow/knee rotation through extension, fixed support feet, flat resting palms, curled equipment grips, stacked side-plank feet, grounded bridge hands, seated foot contact, and forward-facing walking feet. The lateral-walk band wraps above the knees, and dumbbell handles follow the grip orientation. Exercise views expose the movement more clearly on either side.
+The prototype adapts a 53-bone rig, adds unweighted terminal markers for the existing solver, and applies matte shading and illustrative training shorts. Human-specific pose settings refine all 20 demonstrations: stable elbow/knee rotation through extension, fixed support feet, flat resting palms, curled equipment grips, stacked side-plank feet, grounded bridge hands, seated foot contact, and forward-facing walking feet. The lateral-walk band wraps above the knees on both figures, hands rest on the hips, and dumbbell handles follow the grip orientation. Exercise views expose the movement more clearly on either side.
 
 This is an illustrative rig, not a clinically validated anatomical model or new motion-capture library. Joint centers and surface contacts remain approximations; the checks do not establish safe technique or detect every mesh intersection. Loading the human requires a local/hosted server and the asset file; the original self-contained offline option remains available.
 
 The human bird-dog support arm uses a fixed backward elbow bend direction and a bind-pose hinge plane to avoid elbow flips. Its palm orientation is restored after IK and supporting fingers extend above the mat. Diagnostics also check elbow direction, palm orientation and fingertip-marker clearance across 126 reach/breathing samples on both sides. Paused playback freezes the breathing animation as well as the exercise phase.
 
-Open **Preview diagnostics → Check all exercise poses** to check 840 samples (21 positions × 20 exercises × both sides), including finite transforms, abrupt limb rotations, planted-joint drift (2 cm tolerance), and supporting fingertip clearance. The additional bird-dog checks cover breathing extremes. Use the five visual review groups to inspect start/middle/end contact sheets; **Other side** also controls the sheets. These are renderer regression checks, not biomechanical validation.
+Open **Preview diagnostics → Check all exercise poses** to check 840 samples (21 positions × 20 exercises × both sides), including finite transforms, abrupt limb rotations, planted-joint drift (2 cm tolerance), and supporting fingertip clearance. The additional bird-dog checks cover breathing extremes. On both figures the audit also compares each start pose with its exercise spec (12° tolerance, skipping limbs that IK places on purpose), and on the human figure it checks that the lateral-walk hands stay on the hips rather than crossing. `npm test` runs the same audit headlessly. Use the five visual review groups to inspect start/middle/end contact sheets; **Other side** also controls the sheets. These are renderer regression checks, not biomechanical validation.
 
 ## Limitations
 

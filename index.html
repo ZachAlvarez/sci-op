@@ -4680,14 +4680,14 @@ const V3_3D = (function(){
     if(cfg.db === "both"){ db(palm("Left"), gripAxis("Left")); db(palm("Right"), gripAxis("Right")); }
     if(cfg.band === "hands") cyl(palm("Left"), palm("Right"), .008, M.band, attach);
     if(cfg.band === "knees"){
-      const k = s=>wpos(s+"Leg").lerp(wpos(s+"UpLeg"),humanFigure ? .22 : -.12);
-      if(humanFigure){
-        const left = k("Left"), right = k("Right"), center = left.clone().lerp(right,.5);
-        const width = left.distanceTo(right)/2+.075, lateral = left.clone().sub(right).normalize();
-        const forward = V(0,0,1), points = [];
-        for(let i=0;i<=20;i++){ const a = i*Math.PI*2/20; points.push(center.clone().addScaledVector(lateral,Math.cos(a)*width).addScaledVector(forward,Math.sin(a)*.075)); }
-        for(let i=1;i<points.length;i++) cyl(points[i-1],points[i],.009,M.band,attach);
-      } else cyl(k("Left"),k("Right"),.012,M.band,attach);
+      // The band sits just above the knees and wraps around both thighs.
+      const k = s=>wpos(s+"Leg").lerp(wpos(s+"UpLeg"),.22);
+      const left = k("Left"), right = k("Right"), center = left.clone().lerp(right,.5);
+      const depth = humanFigure ? .075 : .085;
+      const width = left.distanceTo(right)/2+depth, lateral = left.clone().sub(right).normalize();
+      const forward = V(0,0,1), points = [];
+      for(let i=0;i<=20;i++){ const a = i*Math.PI*2/20; points.push(center.clone().addScaledVector(lateral,Math.cos(a)*width).addScaledVector(forward,Math.sin(a)*depth)); }
+      for(let i=1;i<points.length;i++) cyl(points[i-1],points[i],.009,M.band,attach);
     }
     if(cfg.band === "overhead" && anchors){ cyl(palm("Left"), anchors.L, .007, M.band, attach); cyl(palm("Right"), anchors.R, .007, M.band, attach); }
     if(cfg.band === "forward" && anchors){ cyl(palm(nearSide), anchors.F, .007, M.band, attach); }
@@ -4741,6 +4741,15 @@ const V3_3D = (function(){
       const hip = wpos(far+"UpLeg").add(V(0,.075,.035));
       ik2(far+"Arm",far+"ForeArm",far+"Hand",rest[far+"Arm"].len,rest[far+"ForeArm"].len,hip,wpos(far+"ForeArm").add(V(0,.2,0)),true);
       orientHand(far,P[far].fa,V(0,-1,0),.1);
+    }
+    if(cur.id === "lateral") for(const side of ["Left","Right"]){
+      // Hands rest on the hips. The mannequin's arm angles cross the longer
+      // human forearms in front of the groin, so place the wrists directly.
+      const out = side === "Left" ? 1 : -1;
+      const hip = wpos(side+"UpLeg").add(V(out*.115,.11,.04));
+      const pole = wpos(side+"Arm").add(V(out*.5,-.2,-.35));
+      ik2(side+"Arm",side+"ForeArm",side+"Hand",rest[side+"Arm"].len,rest[side+"ForeArm"].len,hip,pole,true);
+      orientHand(side,V(-out*.35,-.45,.8),V(-out,0,0),.15);
     }
     if(cur.id === "glide"){
       // Keep the inactive foot on the floor while the other leg glides.
@@ -4926,7 +4935,7 @@ const V3_3D = (function(){
       if(!loaded) return {error:"Figure not ready"};
       const previousId = curId, previousMirror = curMirror, previousWalkTime = walkT;
       const errors = []; let samples = 0, supportSamples = 0;
-      const contacts = {};
+      const contacts = {}, fidelity = {};
       try {
         for(const id of Object.keys(P3)) for(const mirror of [false,true]){
           setExercise(id,mirror);
@@ -4953,6 +4962,24 @@ const V3_3D = (function(){
               }
               const support = ["bridge","slbridge"].includes(id) ? [near,far] : ["bird","sideK","sideF"].includes(id) ? [near] : [];
               for(const side of support) c.minSupportTip = Math.min(c.minSupportTip,wpos(side+"HandMiddle4").y);
+              if(id === "lateral") c.minHandGap = Math.min(c.minHandGap ?? Infinity,wpos("LeftHandMiddle4").x-wpos("RightHandMiddle4").x);
+            }
+            if(step === 0 && !cur.dclip){
+              // Start pose vs. its spec: how far each limb segment ends up
+              // from the direction the exercise definition asked for.
+              const f = fidelity[id] ||= {};
+              for(const side of ["Left","Right"]) for(const [key,a,b] of [["ua","Arm","ForeArm"],["fa","ForeArm","Hand"],["th","UpLeg","Leg"],["sh","Leg","Foot"]]){
+                const role = key + (side === (mirror ? "Left" : "Right") ? "N" : "F");
+                const deg = wpos(side+b).sub(wpos(side+a)).normalize().angleTo(PA[side][key])*180/Math.PI;
+                f[role] = Math.max(f[role] || 0, +deg.toFixed(1));
+                // Limbs placed by IK (dowel grip, planted hands, stacked legs)
+                // intentionally leave their spec angles; the rest must match.
+                const arm = key === "ua" || key === "fa", far = role.endsWith("F");
+                const placed = (cur.dowel && arm) || (humanFigure && (
+                  (["bridge","slbridge","lateral"].includes(id) && arm) || (id === "bird" && arm && !far) ||
+                  (["sideK","sideF"].includes(id) && far) || (id === "glide" && far && !arm)));
+                if(!placed && deg > 12) errors.push(`${id}/${mirror}: start pose ${role} is ${deg.toFixed(0)}° off its spec`);
+              }
             }
             samples++;
           }
@@ -4985,8 +5012,9 @@ const V3_3D = (function(){
         c.minSupportTip = Number.isFinite(c.minSupportTip) ? +c.minSupportTip.toFixed(4) : null;
         if(c.maxPinError > .02) errors.push(`${id}: support moved ${(c.maxPinError*100).toFixed(1)} cm`);
         if(c.minSupportTip !== null && c.minSupportTip < .012) errors.push(`${id}: fingertip below mat (${c.minSupportTip})`);
+        if(c.minHandGap !== undefined){ c.minHandGap = +c.minHandGap.toFixed(3); if(c.minHandGap < .1) errors.push(`${id}: hands meet or cross in front of the body (fingertips ${c.minHandGap} m apart)`); }
       }
-      return {figure:humanFigure ? "human" : "original",exercises:Object.keys(P3).length,samples,supportSamples,contacts,errors};
+      return {figure:humanFigure ? "human" : "original",exercises:Object.keys(P3).length,samples,supportSamples,contacts,fidelity,errors};
     },
     get loaded(){ return loaded; },
     onReady(f){ if(loaded) f(); else readyCbs.push(f); },
