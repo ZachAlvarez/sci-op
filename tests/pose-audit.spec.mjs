@@ -43,3 +43,24 @@ test("a missing human asset falls back to the original figure", async ({ page })
   await page.waitForFunction(() => typeof V3 !== "undefined" && V3 && V3.loaded, null, { timeout: 60_000 });
   expect(await page.evaluate(() => V3.figure)).toBe("original");
 });
+
+test("dragging the figure rotates the camera", async ({ page }) => {
+  await page.goto("/index.html?preview=figure&exercise=goblet");
+  await page.waitForFunction(() => typeof V3 !== "undefined" && V3 && V3.loaded, null, { timeout: 60_000 });
+  const before = await page.evaluate(() => V3.camera);
+
+  const box = await page.locator("#study-stage canvas").boundingBox();
+  const x = box.x + box.width / 2, y = box.y + box.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + 160, y + 40, { steps: 8 });
+  await page.mouse.up();
+
+  const after = await page.evaluate(() => V3.camera);
+  expect(after.theta).toBeCloseTo(before.theta - 1.6, 1); // 160 px at 0.01 rad per px
+  expect(after.phi).toBeLessThan(before.phi);             // mouse drags also tilt
+
+  // Moving the mouse without a button held must not rotate.
+  await page.mouse.move(x - 100, y);
+  expect((await page.evaluate(() => V3.camera)).theta).toBe(after.theta);
+});
