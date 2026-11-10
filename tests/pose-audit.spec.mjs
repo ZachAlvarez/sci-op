@@ -26,3 +26,20 @@ for (const figure of ["original", "human"]) {
     expect(report.errors).toEqual([]);
   });
 }
+
+test("the workout app uses the human figure by default and the original on request", async ({ page }) => {
+  const figureAt = async url => {
+    await page.goto(url);
+    await page.waitForFunction(() => typeof V3 !== "undefined" && V3 && V3.loaded, null, { timeout: 60_000 });
+    return page.evaluate(() => V3.figure);
+  };
+  expect(await figureAt("/index.html")).toBe("human");
+  expect(await figureAt("/index.html?figure=original")).toBe("original");
+});
+
+test("a missing human asset falls back to the original figure", async ({ page }) => {
+  await page.route("**/assets/human-base-rigged.glb", route => route.abort());
+  await page.goto("/index.html");
+  await page.waitForFunction(() => typeof V3 !== "undefined" && V3 && V3.loaded, null, { timeout: 60_000 });
+  expect(await page.evaluate(() => V3.figure)).toBe("original");
+});

@@ -4,7 +4,7 @@ document.title = "Sci-Op · Human figure study";
 document.body.innerHTML = `
   <main class="figure-study">
     <header><span class="eyebrow">SCI-OP / MOVEMENT STUDY</span><h1>A more human demonstrator.</h1>
-    <p>Compare body shape and exercise positions. This is a visual prototype; poses have not been clinically validated.</p></header>
+    <p>Compare body shape and exercise positions. Poses are illustrative and have not been clinically validated.</p></header>
     <div class="study-controls">
       <label>Exercise<select id="study-ex">${Object.entries(EX).map(([id,e])=>`<option value="${id}">${e.name}</option>`).join("")}</select></label>
       <div><span class="control-label">Figure</span><div class="segctl"><a id="human-link">Human study</a><a id="original-link">Original</a></div></div>
@@ -30,13 +30,13 @@ function updateStudyLinks(){
   for(const kind of ["human","original"]){
     const url = new URL(location.href); url.searchParams.set("figure",kind); url.searchParams.set("exercise",studySelect.value);
     const a = document.getElementById(kind+"-link"); a.href = url.href;
-    if((studyParams.get("figure") === "human" ? "human" : "original") === kind) a.setAttribute("aria-current","page");
+    if((studyParams.get("figure") === "original" ? "original" : "human") === kind) a.setAttribute("aria-current","page");
   }
 }
 function mountStudy(){
   V3.mount(document.getElementById("study-stage"),studySelect.value,studyMirror,studyUi);
   document.getElementById("study-cues").innerHTML = EX[studySelect.value].cues.map(c=>`<li>${c}</li>`).join("");
-  document.getElementById("study-status").textContent = !V3.is3D ? "3D unavailable — showing original pre-rendered demonstration." : V3.figure === "human" ? "Human study · 53-bone body rig · illustrative movement" : "Original figure" + (studyParams.get("figure") === "human" ? " · human asset unavailable; showing fallback" : "");
+  document.getElementById("study-status").textContent = !V3.is3D ? "3D unavailable — showing original pre-rendered demonstration." : V3.figure === "human" ? "Human study · 53-bone body rig · illustrative movement" : "Original figure" + (studyParams.get("figure") !== "original" ? " · human asset unavailable; showing fallback" : "");
   updateStudyLinks();
 }
 studySelect.onchange = ()=>{ if(V3?.loaded) mountStudy(); };

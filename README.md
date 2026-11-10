@@ -8,12 +8,14 @@
 
 | File | What it is |
 |---|---|
-| `index.html` | The core app. Its 3D engine, figure model and fallback frames are embedded, so the training experience works offline (with a system-font fallback if Google Fonts is unavailable). |
+| `index.html` | The core app. Its 3D engine, the original mannequin and pre-rendered fallback frames are embedded, so the training experience works offline (with a system-font fallback if Google Fonts is unavailable). |
+| `assets/human-base-rigged.glb` | The default human figure (5 MB), loaded when the app is served over HTTP. |
+| `figure-preview.js` | The figure study page, opened with `?preview=figure`. |
 | `form-coach.html` | Optional camera form coach: rep counting and joint-based form cues using MediaPipe Pose. Needs HTTPS for camera access and an internet connection to load MediaPipe and its pose model. |
 
 ## Run it
 
-- **Locally:** open `index.html` in Chrome.
+- **Locally:** run `npm run serve` and open `http://127.0.0.1:4173`. Opening `index.html` directly as a file also works, but browsers block loading the human model from disk, so it shows the original mannequin.
 - **Hosted:** enable GitHub Pages (Settings → Pages → deploy from `main`, root). The app is then at `https://<user>.github.io/sci-op/` and the coach at `.../form-coach.html`. Pages serves HTTPS, so the camera coach works there.
 - **Phone:** open the Pages URL in Chrome and use *Add to home screen*.
 
@@ -36,21 +38,23 @@ The tests use Chromium's fake camera and a stubbed MediaPipe module, so they run
 - Daily routine: walk, McGill curl-up, side plank, bird dog, sciatic nerve glide, slant-board calf stretch, slackboard balance.
 - Phase 1 (weeks 1–4) and Phase 2 (weeks 5–10) strength work, with readiness milestones for heavier lifting.
 - Guided session: rep and hold counts, rests, side switches, spoken coaching, optional voice commands (next, pause, resume, repeat, back, leg), and a one-tap "symptoms going down the leg" stop.
-- 3D figure with orbit views; falls back to pre-rendered frames where WebGL is unavailable.
+- 3D human figure with orbit views. If the model cannot load, the embedded mannequin is used; where WebGL is unavailable, pre-rendered frames of the human figure play instead.
 
 ## How the animation works
 
 The figure is a rigged humanoid driven by hand-keyframed pose specs per exercise, blended with minimum-jerk easing and grounded each frame so feet, hands and knees stay planted. The walk is replayed from motion-capture data. Exercise motions are keyframed demonstrations, not motion capture.
 
-### Human figure prototype
+### Figures
 
-Serve this folder over HTTP (for example, `python -m http.server 8765 --bind 127.0.0.1`), then open `http://127.0.0.1:8765/index.html?preview=figure&figure=human`.
+The human figure is the default. Add `?figure=original` to any URL to use the original mannequin. The human loads from `assets/human-base-rigged.glb` (20-second timeout); if it is unavailable, the embedded mannequin is used instead.
 
-This isolated preview compares a MakeHuman/MPFB-based human with the original figure across all 20 exercises, with playback, scrubbing, side selection, and viewing angles. It does not initialize or save workout progress. The human loads from `assets/human-base-rigged.glb`; if unavailable, the original embedded figure is used and identified in the preview. Normal app URLs keep the original model. Add `?figure=human` to try the new figure in the workout interface.
+Everything that differs between the two figures (materials, limb and hand solvers, contact adjustments, audit rules) lives in two profile objects, `ORIGINAL` and `HUMAN`, near the end of the 3D engine in `index.html`. The engine asks the active profile rather than checking which figure is loaded.
 
-The prototype adapts a 53-bone rig, adds unweighted terminal markers for the existing solver, and applies matte shading and illustrative training shorts. Human-specific pose settings refine all 20 demonstrations: stable elbow/knee rotation through extension, fixed support feet, flat resting palms, curled equipment grips, stacked side-plank feet, grounded bridge hands, seated foot contact, and forward-facing walking feet. The lateral-walk band wraps above the knees on both figures, hands rest on the hips, and dumbbell handles follow the grip orientation. Exercise views expose the movement more clearly on either side.
+To compare them, serve this folder (`npm run serve`) and open `http://127.0.0.1:4173/index.html?preview=figure`. The study page shows either figure across all 20 exercises, with playback, scrubbing, side selection, and viewing angles. It does not initialize or save workout progress.
 
-This is an illustrative rig, not a clinically validated anatomical model or new motion-capture library. Joint centers and surface contacts remain approximations; the checks do not establish safe technique or detect every mesh intersection. Loading the human requires a local/hosted server and the asset file; the original self-contained offline option remains available.
+The human figure adapts a 53-bone rig, adds unweighted terminal markers for the existing solver, and applies matte shading and illustrative training shorts. Human-specific pose settings refine all 20 demonstrations: stable elbow/knee rotation through extension, fixed support feet, flat resting palms, curled equipment grips, stacked side-plank feet, grounded bridge hands, seated foot contact, and forward-facing walking feet. The lateral-walk band wraps above the knees on both figures, hands rest on the hips, and dumbbell handles follow the grip orientation. Exercise views expose the movement more clearly on either side.
+
+This is an illustrative rig, not a clinically validated anatomical model or new motion-capture library. Joint centers and surface contacts remain approximations; the checks do not establish safe technique or detect every mesh intersection. Loading the human requires a local or hosted server and the asset file; the embedded mannequin remains the offline fallback.
 
 The human bird-dog support arm uses a fixed backward elbow bend direction and a bind-pose hinge plane to avoid elbow flips. Its palm orientation is restored after IK and supporting fingers extend above the mat. Diagnostics also check elbow direction, palm orientation and fingertip-marker clearance across 126 reach/breathing samples on both sides. Paused playback freezes the breathing animation as well as the exercise phase.
 
@@ -65,7 +69,7 @@ Open **Preview diagnostics → Check all exercise poses** to check 840 samples (
 ## Credits
 
 - Figure mesh: CC0 human model from [Mesh2Motion](https://github.com/Mesh2Motion/mesh2motion-app).
-- Human figure prototype: [Innerscene human base with 53-bone rig](https://www.innerscene.com/tools/library/3d-parts/human-base-mesh-with-editable-53-bone-rig-8e7c8ab1), derived from MakeHuman/MPFB, CC0. See `assets/human-base-rigged.LICENSE.txt`.
+- Human figure: [Innerscene human base with 53-bone rig](https://www.innerscene.com/tools/library/3d-parts/human-base-mesh-with-editable-53-bone-rig-8e7c8ab1), derived from MakeHuman/MPFB, CC0. See `assets/human-base-rigged.LICENSE.txt`.
 - Walk motion capture: Mixamo clip bundled with the three.js `Xbot` example.
 - [three.js](https://threejs.org) r128 (MIT), embedded.
 - [MediaPipe Tasks Vision](https://developers.google.com/mediapipe) (Apache 2.0), loaded from CDN by the form coach.
