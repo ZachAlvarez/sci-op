@@ -3703,6 +3703,18 @@ section.block{margin:0 0 28px}
 .check[aria-pressed="true"] svg{opacity:1}
 .check[aria-pressed="true"] path{stroke:var(--on-accent)}
 .ex.is-done .exname{color:var(--muted)}
+.ex-actions{display:grid;justify-items:center;gap:8px;flex:none}
+.record-btn{border:1px solid var(--line);background:var(--fill);color:var(--ink);border-radius:10px;padding:8px 10px;cursor:pointer;font:inherit;font-size:13px}
+.last-entry{display:block;font-size:12px;line-height:1.4;color:var(--muted);margin-top:5px}
+.record-dialog{width:min(520px,calc(100% - 32px));max-height:85dvh;overflow:auto;border:1px solid var(--line);border-radius:20px;background:var(--surface);color:var(--ink);padding:24px}
+.record-dialog::backdrop{background:#0009}
+.record-dialog h2{margin:0 0 8px}.record-dialog label{display:block;font-size:14px;margin-top:16px}
+.record-dialog input:not([type=checkbox]),.record-dialog select,.record-dialog textarea{box-sizing:border-box;display:block;width:100%;padding:11px;margin-top:6px;background:var(--fill);color:var(--ink);border:1px solid var(--line);border-radius:10px;font:inherit}
+.record-grid{display:grid;grid-template-columns:2fr 1fr;gap:12px}.record-footer{display:flex;justify-content:flex-end;gap:12px;margin-top:20px}
+.record-dialog .previous-entry{padding:12px;background:var(--fill);border-radius:12px;font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}
+.record-dialog [role=alert]{color:var(--alert)}.history-entry{padding:14px 16px;border-bottom:1px solid var(--line);overflow-wrap:anywhere}.history-entry p{margin:6px 0;white-space:pre-wrap}.history-entry small{color:var(--muted)}
+.g-record{display:flex;justify-content:space-between;align-items:center;gap:12px;color:var(--muted);font-size:13px}.g-record .record-btn{color:inherit}
+button:disabled{opacity:.5;cursor:default}
 
 .detail{padding:0 12px 16px}
 .detail[hidden]{display:none}
@@ -3871,6 +3883,7 @@ nav.tabs button[aria-selected="true"]::before{content:"";position:absolute;top:-
       <button class="g-play" data-g="play" aria-label="Pause"><svg id="gPlayIcon" width="26" height="26" viewBox="0 0 24 24"><rect x="6" y="4.5" width="4" height="15" rx="1"/><rect x="14" y="4.5" width="4" height="15" rx="1"/></svg></button>
       <button data-g="next" aria-label="Skip to next exercise"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M18 5v14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M5 5.5v13L15 12z" fill="currentColor"/></svg></button>
     </div>
+    <div class="g-record"><span id="gPrevious"></span><button class="record-btn" data-g="record">Record exercise</button></div>
     <button class="g-leg" data-g="leg">Symptoms going down the leg</button>
     <p class="g-note" id="gNote"></p>
   </div>
@@ -3882,6 +3895,7 @@ nav.tabs button[aria-selected="true"]::before{content:"";position:absolute;top:-
   </div>
 </div>
 
+<dialog id="workout-record" class="record-dialog" aria-labelledby="record-title"></dialog>
 <nav class="tabs" aria-label="Sections"><div class="in" role="tablist">
   <button role="tab" data-tab="today" aria-selected="true">Today</button>
   <button role="tab" data-tab="program" aria-selected="false">Program</button>
@@ -5052,7 +5066,7 @@ const V3_3D = (function(){
             poseAt(u === 0 ? {phase:"holdA",s:0} : u === 1 ? {phase:"holdB",s:0} : {phase:"out",s:scrubInv(u)},0);
             for(const [name,bone] of Object.entries(bones)){
               if(!bone.matrixWorld.elements.every(Number.isFinite)) errors.push(`${id}/${mirror}/${u}: non-finite ${name}`);
-              if(fig.detailedAudit && !cur.dclip && /(?:Arm|ForeArm|UpLeg|Leg)$/.test(name)){
+              if(fig.detailedAudit && !cur.dclip && /(?:Arm|ForeArm|UpLeg|Leg|Foot)$/.test(name)){
                 const q = bone.getWorldQuaternion(new T.Quaternion());
                 if(previousJoints[name] && previousJoints[name].angleTo(q) > .65) errors.push(`${id}/${mirror}/${u}: abrupt ${name} rotation`);
                 previousJoints[name] = q;
@@ -5280,12 +5294,13 @@ const LS_KEY = "b2l-state-v1";
 function todayKey(d){ d=d||new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
 function dayLog(k){ k=k||todayKey(); if(!S.log[k]) S.log[k]={done:[],sym:null,extra:false}; return S.log[k]; }
 function loadLocal(){ try{ const raw = localStorage.getItem(LS_KEY); if(raw){ const v = JSON.parse(raw); if(v && typeof v==="object") S = Object.assign(S, v); } }catch(e){} }
-function saveLocal(){ try{ localStorage.setItem(LS_KEY, JSON.stringify(S)); }catch(e){} }
+function saveLocal(){ try{ localStorage.setItem(LS_KEY, JSON.stringify(S)); return true; }catch(e){ setStatus("Storage is unavailable or full. New changes are only kept until this page closes."); return false; } }
 function save(){
-  S.updated = Date.now(); saveLocal();
+  S.updated = Date.now(); const stored = saveLocal();
   if(dbRef){ clearTimeout(saveTimer); saveTimer = setTimeout(async ()=>{
     try{ await dbRef.set(JSON.parse(JSON.stringify(S))); setStatus("Progress saved to your account."); }
-    catch(e){ setStatus("Progress saves on this device."); dbRef = null; } }, 600); }
+    catch(e){ setStatus(stored ? "Progress saves on this device." : "Changes could not be saved. Keep this page open and copy your entries."); dbRef = null; } }, 600); }
+  return stored;
 }
 function setStatus(t){ document.getElementById("saveStatus").textContent = t; }
 async function initCloud(){
@@ -5303,6 +5318,69 @@ async function initCloud(){
   }catch(e){}
 }
 
+/* ================= workout history ================= */
+function escapeHTML(value){ return String(value ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function trainingEntries(id){
+  return Object.entries(S.log).filter(([date])=>date <= todayKey()).flatMap(([date,day])=>
+    Object.entries(day.training || {}).filter(([key])=>(!id || key === id) && Object.hasOwn(EX,key)).map(([key,entry])=>({...entry,date,id:key})))
+    .sort((a,b)=>b.date.localeCompare(a.date) || (b.updated || 0)-(a.updated || 0));
+}
+function entryDate(date){ return date === todayKey() ? "Today" : new Date(date+"T12:00:00").toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"}); }
+function recordSummary(entry){
+  const kind = DOSE[entry.id]?.type, measure = kind === "timed" ? "min" : kind === "hold" ? "sec / hold" : "reps / set";
+  return [entry.weight != null ? `${entry.weight} ${entry.unit}${["row","rdl","press"].includes(entry.id) ? " / dumbbell" : ""}` : "", entry.reps ? `${entry.reps} ${measure}` : "", entry.difficulty || ""].filter(Boolean).join(" · ");
+}
+function lastTrainingText(id){
+  const entry = trainingEntries(id)[0];
+  return entry ? `${entryDate(entry.date)}: ${recordSummary(entry) || "Notes recorded"}` : "";
+}
+let recordingId = null, resumeAfterRecord = false;
+function openRecord(id){
+  if(!Object.hasOwn(EX,id)) return;
+  recordingId = id;
+  const guided = !document.getElementById("guide").hidden;
+  resumeAfterRecord = guided && !G.paused;
+  if(guided) gPause(true);
+  const current = dayLog().training?.[id], previous = trainingEntries(id).find(entry=>entry.date < todayKey());
+  const values = current || {}, unit = values.unit || previous?.unit || "lb", kind = DOSE[id].type;
+  const measure = kind === "timed" ? "Minutes completed" : kind === "hold" ? "Seconds per hold" : "Reps per set";
+  const dialog = document.getElementById("workout-record");
+  dialog.innerHTML = `<form id="record-form"><h2 id="record-title">Record ${escapeHTML(EX[id].name)}</h2>
+    <p class="small">Today's entry. Saving again updates this entry.</p>
+    ${previous ? `<div class="previous-entry"><strong>Last time · ${entryDate(previous.date)}</strong>\n${escapeHTML(recordSummary(previous))}${previous.notes ? "\n"+escapeHTML(previous.notes) : ""}</div>` : '<p class="small">Your first recorded entry for this exercise.</p>'}
+    <div class="record-grid"><label>${["row","rdl","press"].includes(id) ? "Weight per dumbbell" : "Weight / load"} (optional)<input name="weight" type="number" min="0" max="5000" step="0.25" value="${escapeHTML(values.weight ?? previous?.weight ?? "")}"></label>
+    <label>Unit<select name="unit"><option value="lb" ${unit === "lb" ? "selected" : ""}>lb</option><option value="kg" ${unit === "kg" ? "selected" : ""}>kg</option></select></label></div>
+    <label>${measure}<input name="reps" maxlength="100" placeholder="${kind === "timed" ? "10" : kind === "hold" ? "10, 10, 8" : "10, 9, 8"}" value="${escapeHTML(values.reps || "")}" aria-describedby="record-measure-help"></label>
+    <p class="small" id="record-measure-help">${kind === "timed" ? "Enter the minutes you actually completed." : "Separate each set or hold with a comma. For two-sided exercises, record each side in order and identify it in notes."}</p>
+    <label>Difficulty<select name="difficulty"><option value="">Not recorded</option>${["Easy","Moderate","Hard"].map(d=>`<option ${values.difficulty === d ? "selected" : ""}>${d}</option>`).join("")}</select></label>
+    <label>Notes<textarea name="notes" maxlength="500" rows="3" placeholder="Equipment, sides, or what to remember next time">${escapeHTML(values.notes || "")}</textarea></label>
+    <label><input name="complete" type="checkbox" ${dayLog().done.includes(id) ? "checked" : ""}> Mark exercise complete</label>
+    <p id="record-error" role="alert"></p><div class="record-footer"><button class="record-btn" type="button" data-record-cancel>Cancel</button><button class="record-btn" type="submit">Save entry</button></div></form>`;
+  dialog.showModal();
+}
+function saveRecord(form){
+  const id = recordingId; if(!id || !form.reportValidity()) return;
+  const data = new FormData(form), raw = String(data.get("reps")).trim(), timed = DOSE[id].type === "timed";
+  const pattern = timed ? /^\d{1,3}(\.\d{1,2})?$/ : /^\d{1,3}(\s*,\s*\d{1,3}){0,19}$/;
+  const error = message=>{ document.getElementById("record-error").textContent = message; };
+  if(raw && !pattern.test(raw)) return error(timed ? "Enter minutes as a number, such as 10 or 10.5." : "Enter whole numbers separated by commas, such as 10, 9, 8 (up to 20 values).");
+  const weight = data.get("weight") === "" ? null : Number(data.get("weight")), notes = String(data.get("notes")).trim(), difficulty = String(data.get("difficulty"));
+  if(weight === null && !raw && !notes && !difficulty) return error("Record a weight, completed amount, difficulty, or note before saving.");
+  const L = dayLog(); L.training ||= {};
+  L.training[id] = {weight,unit:String(data.get("unit")),reps:raw ? raw.split(",").map(n=>String(Number(n.trim()))).join(", ") : "",difficulty,notes,updated:Date.now()};
+  if(data.has("complete")){ if(!L.done.includes(id)) L.done.push(id); }
+  else L.done = L.done.filter(done=>done !== id);
+  const stored = save();
+  document.getElementById("workout-record").close();
+  renderToday(); renderProgram(); renderProgress();
+  updateGuidedHistory();
+  if(stored) setStatus(`Saved today's ${EX[id].name} entry.`);
+}
+function trainingHistoryHTML(){
+  const entries = trainingEntries().slice(0,30);
+  return `<section class="block"><div class="shead"><h2>Training history</h2></div>${entries.length ? `<p class="bnote">Most recent 30 entries. Weight, actual work, and notes are recorded separately from exercise completion.</p><div class="group">${entries.map(e=>`<article class="history-entry"><strong>${escapeHTML(EX[e.id].name)}</strong><br><small>${entryDate(e.date)}</small><p>${escapeHTML(recordSummary(e))}</p>${e.notes ? `<p>${escapeHTML(e.notes)}</p>` : ""}${e.date === todayKey() ? `<button class="record-btn" data-record="${e.id}">Edit today's entry</button>` : ""}</article>`).join("")}</div>` : '<div class="rest">Use Record beside an exercise to save weight, completed work, difficulty, and notes. Your previous entry appears next workout.</div>'}</section>`;
+}
+
 /* ================= list rendering ================= */
 const CHECK = `<svg width="14" height="14" viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10.5l4 4 8-9" stroke="#fff" stroke-width="2.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const WARN = `<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3L2 20h20L12 3z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 10v4.5M12 17.2v.3" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>`;
@@ -5313,8 +5391,8 @@ function exItem(id, scope, checkable){
   return `<div class="ex ${checkable&&done?'is-done':''}" data-id="${id}" data-key="${key}">
     <div class="exrow">
       <button class="thumb" data-open="${key}" aria-label="Show ${ex.name}">${thumbHTML(id)}</button>
-      <button class="exmain" data-open="${key}" aria-expanded="${open}"><span class="exname">${ex.name}</span><span class="exdose">${ex.dose}</span></button>
-      ${checkable?`<button class="check" data-check="${id}" aria-pressed="${done}" aria-label="Mark ${ex.name} done">${CHECK}</button>`:''}
+      <button class="exmain" data-open="${key}" aria-expanded="${open}"><span class="exname">${ex.name}</span><span class="exdose">${ex.dose}</span><span class="last-entry">${escapeHTML(lastTrainingText(id))}</span></button>
+      <div class="ex-actions">${checkable?`<button class="check" data-check="${id}" aria-pressed="${done}" aria-label="Mark ${ex.name} done">${CHECK}</button>`:''}<button class="record-btn" data-record="${id}" aria-label="Record ${ex.name}">Record</button></div>
     </div>
     <div class="detail" ${open?'':'hidden'}>
       <div class="stage" data-stage="${key}">${V3 ? '' : fig(ex,{animate:true})}</div>
@@ -5350,21 +5428,27 @@ function remount3D(){
   if(st && openState[k] && !st.closest(".view").hidden && document.getElementById("guide").hidden) mount3D(k);
 }
 function isStrengthDay(){ const L = dayLog(); return S.strengthDays.includes(new Date().getDay()) || L.extra; }
+const REDUCED_ROUTINE = ["walk","curl","bird","glide"];
+function todayPlan(){
+  const L = dayLog(), reduced = L.sym === "leg";
+  const available = ids=>ids.filter(id=>!(L.skipped || []).includes(id));
+  return {reduced, daily:available(reduced ? REDUCED_ROUTINE : PROGRAM.daily), strength:available(!reduced && isStrengthDay() ? PROGRAM[S.phase] : [])};
+}
 function sessionIds(){
-  const ids = PROGRAM.daily.slice(); if(isStrengthDay()) ids.push(...PROGRAM[S.phase]);
+  const plan = todayPlan(), ids = [...plan.daily,...plan.strength];
   const L = dayLog(), left = ids.filter(i=>!L.done.includes(i));
   return left.length ? left : ids;
 }
 function estimateMin(ids){ let s = 0; ids.forEach(id=>{ const segs = buildSegs(id, 0, 1); segs.forEach(g=>s += g.dur); }); return Math.round(s/60); }
 function renderToday(){
-  const L = dayLog(), daily = PROGRAM.daily, str = PROGRAM[S.phase];
+  const L = dayLog(), plan = todayPlan(), daily = plan.daily, str = plan.strength;
   const dDone = daily.filter(i=>L.done.includes(i)).length, sDone = str.filter(i=>L.done.includes(i)).length;
-  const ids = sessionIds(), allDone = ids.every(i=>L.done.includes(i));
+  const ids = sessionIds(), allDone = ids.length > 0 && ids.every(i=>L.done.includes(i));
   const heroFig = HERO ? `<img src="${HERO}" alt="">` : (V3 && !V3.is3D ? V3.thumb("pullapart") : "");
-  const sessionName = isStrengthDay() ? `Spine routine and phase ${S.phase} strength` : "Daily spine routine";
-  let h = `<section class="hero"><div><h2>${allDone ? "Today's session is done" : sessionName}</h2>
+  const sessionName = plan.reduced ? "Reduced routine today" : isStrengthDay() ? `Spine routine and phase ${S.phase} strength` : "Daily spine routine";
+  let h = `<section class="hero"><div><h2>${!ids.length ? "No exercises queued" : allDone ? "Today's session is done" : sessionName}</h2>
       <p>${ids.length} exercises, about ${estimateMin(ids)} min, coached by voice</p>
-      <button class="start" data-g="start"><svg width="18" height="18" viewBox="0 0 24 24"><path d="M7 4.5v15l12.5-7.5z" fill="currentColor"/></svg>${allDone ? "Run it again" : (L.done.length ? "Continue session" : "Start session")}</button></div>
+      <button class="start" data-g="start" ${ids.length ? "" : "disabled"}><svg width="18" height="18" viewBox="0 0 24 24"><path d="M7 4.5v15l12.5-7.5z" fill="currentColor"/></svg>${allDone ? "Run it again" : (L.done.length ? "Continue session" : "Start session")}</button></div>
     <div class="hero-fig" aria-hidden="true">${heroFig}</div></section>`;
   h += `<div class="checkin"><p>How are the leg symptoms today?</p>
     <div class="chips" role="group" aria-label="Symptoms">
@@ -5374,10 +5458,12 @@ function renderToday(){
     </div>
     ${L.sym==='leg'?`<div class="warn">${WARN}<span>Keep today to the walk, curl-up, bird dog and gentle nerve glides, and skip anything that makes it spread further. If this keeps happening or you notice new weakness or numbness, check in with your doctor or PT.</span></div>`:''}
   </div>`;
-  h += `<section class="block"><div class="shead"><h2>Daily spine routine</h2><span class="count">${dDone} of ${daily.length}</span></div>
-    <p class="bnote">Every day, about 15 minutes. Tap an exercise to see it move.</p>
+  h += `<section class="block"><div class="shead"><h2>${plan.reduced ? "Reduced routine" : "Daily spine routine"}</h2><span class="count">${dDone} of ${daily.length}</span></div>
+    <p class="bnote">${plan.reduced ? "The guided session uses this reduced list. Skip any movement that makes symptoms spread further." : "Tap an exercise to see it move."}${(L.skipped || []).length ? " Exercises stopped for leg symptoms stay out of today's session." : ""}</p>
     <div class="group">${daily.map(i=>exItem(i,"t",true)).join("")}</div></section>`;
-  if(isStrengthDay()){
+  if(plan.reduced){
+    h += `<section class="block"><div class="shead"><h2>Strength</h2></div><div class="rest">Strength is left out of today's guided session because you reported symptoms traveling down the leg.</div></section>`;
+  } else if(isStrengthDay()){
     h += `<section class="block"><div class="shead"><h2>Strength, phase ${S.phase}</h2><span class="count">${sDone} of ${str.length}</span></div>
       <p class="bnote">Brace lightly before every rep.</p><div class="group">${str.map(i=>exItem(i,"t",true)).join("")}</div></section>`;
   } else {
@@ -5401,15 +5487,26 @@ function renderProgram(){
   document.getElementById("view-program").innerHTML = h;
   remount3D();
 }
-function dayStatus(k){ const L = S.log[k]; if(!L) return {cls:"",leg:false}; const d = PROGRAM.daily.filter(i=>L.done.includes(i)).length; return {cls: d===PROGRAM.daily.length ? "full" : (L.done.length ? "part" : ""), leg: L.sym==="leg"}; }
+function dayStatus(k){ const L = S.log[k]; if(!L) return {cls:"",leg:false}; const d = PROGRAM.daily.filter(i=>L.done.includes(i)).length; return {cls: d===PROGRAM.daily.length ? "full" : (L.done.length || Object.keys(L.training || {}).length ? "part" : ""), leg: L.sym==="leg"}; }
+function symptomHistory(today = new Date()){
+  const cursor = new Date(today); cursor.setHours(0,0,0,0);
+  let days = 0;
+  for(let i=0;i<120;i++){
+    const sym = S.log[todayKey(cursor)]?.sym;
+    if(sym !== "none" && sym !== "central") break;
+    days++; cursor.setDate(cursor.getDate()-1);
+  }
+  const current = S.log[todayKey(today)]?.sym;
+  if(current === "leg") return "Today's check-in records symptoms traveling down the leg.";
+  if(!days) return "No symptom check-in today. Unlogged days are unknown and do not count toward a symptom-free streak.";
+  return `${days} consecutive daily check-in${days === 1 ? "" : "s"} without symptoms down the leg, through today. Unlogged days break this count.`;
+}
 function renderProgress(){
   const today = new Date(); today.setHours(0,0,0,0);
   let streak = 0; const c = new Date(today);
   if(dayStatus(todayKey(c)).cls!=="full") c.setDate(c.getDate()-1);
   while(dayStatus(todayKey(c)).cls==="full"){ streak++; c.setDate(c.getDate()-1); }
-  let legFree = 0; const c2 = new Date(today);
-  for(let i=0;i<120;i++){ const L=S.log[todayKey(c2)]; if(L&&L.sym==="leg") break; legFree++; c2.setDate(c2.getDate()-1); }
-  const logged = Object.keys(S.log).filter(k=>S.log[k].done.length).length;
+  const logged = Object.keys(S.log).filter(k=>S.log[k].done.length || Object.keys(S.log[k].training || {}).length).length;
   const start = new Date(today); start.setDate(start.getDate()-27);
   let cells = DOW.map(d=>`<div class="dow">${d[0]}</div>`).join("");
   for(let i=0;i<start.getDay();i++) cells += `<div class="day empty"></div>`;
@@ -5421,10 +5518,10 @@ function renderProgress(){
     <div class="calcard"><div class="cal">${cells}</div>
     <div class="calkey"><span><i style="background:var(--accent)"></i>Full daily routine</span><span><i style="background:color-mix(in srgb,var(--accent) 35%,var(--soft))"></i>Partial</span><span><i style="background:var(--alert)"></i>Leg symptoms</span></div></div></section>
   <section class="block"><div class="shead"><h2>Ready for real lifting</h2><span class="count">${MILESTONES.filter(m=>S.milestones[m.id]).length} of 4</span></div>
-    <p class="bnote">${legFree>=21?"Your log shows 3+ weeks without leg symptoms.":`Your log shows ${legFree} day${legFree===1?'':'s'} since the last leg symptoms.`}</p>
+    <p class="bnote" id="symptom-history">${symptomHistory(today)}</p>
     <div class="group">${MILESTONES.map(m=>`<button class="ms" data-ms="${m.id}" aria-pressed="${!!S.milestones[m.id]}"><span class="box">${CHECK}</span><span>${m.t}</span></button>`).join("")}</div>
     ${allMs?`<div class="ready">All four are in. Start heavier work with trap-bar deadlifts rather than conventional, and front or goblet squats before back squats. Keep the daily routine as your warm-up.</div>`:''}
-  </section>`;
+  </section>${trainingHistoryHTML()}`;
 }
 function renderRules(){
   document.getElementById("view-rules").innerHTML = `<section class="block rules"><div class="shead"><h2>Ground rules</h2></div><div class="card">
@@ -5515,6 +5612,7 @@ function restSeg(id, secs, nextLabel, mirror, side, note){
 }
 const G = {segs:[], ids:[], i:0, t:0, paused:false, raf:0, last:0, said:new Set(), wake:null, rec:null, listening:false, start:0};
 function gOpen(){
+  if(!sessionIds().length) return;
   if(V3 && V3.activeKey){ V3.release(); }
   G.ids = sessionIds();
   G.segs = []; G.ids.forEach((id, n)=>{ buildSegs(id, n, G.ids.length).forEach(s=>{ s.exIndex = n; G.segs.push(s); }); });
@@ -5541,6 +5639,7 @@ let gStageId = null, gStageMirror = null;
 function gMountStage(){
   const seg = G.segs[G.i]; const st = document.getElementById("gStage");
   const id = seg.id || G.ids[G.ids.length-1];
+  updateGuidedHistory();
   if(!V3){ st.innerHTML = fig(EX[id], {animate:true}); return; }
   V3.mount(st, id, !!seg.mirror, null, {drive: gDrive, bare:true});
   gStageId = id; gStageMirror = !!seg.mirror;
@@ -5569,6 +5668,7 @@ function gGoto(i){
   const prev = G.segs[G.i];
   G.i = Math.max(0, Math.min(G.segs.length-1, i)); G.t = 0;
   const seg = G.segs[G.i];
+  updateGuidedHistory();
   if(V3 && seg.id && (seg.id !== gStageId || !!seg.mirror !== gStageMirror)){ V3.setExercise(seg.id, !!seg.mirror); gStageId = seg.id; gStageMirror = !!seg.mirror; }
   if(seg.kind === "done"){ gFinish(); }
 }
@@ -5645,12 +5745,16 @@ function gSyncButtons(){
 }
 function gPause(p){ G.paused = p; if(p && window.speechSynthesis) speechSynthesis.cancel(); if(!p) VOICE.say("Resuming."); gSyncButtons(); }
 function gNote(t){ document.getElementById("gNote").textContent = t || ""; }
+function updateGuidedHistory(){
+  const id = G.segs[G.i]?.id;
+  document.getElementById("gPrevious").textContent = id ? lastTrainingText(id) || "No previous entry" : "";
+}
 function gLeg(){
-  const L = dayLog(); L.sym = "leg"; save();
-  VOICE.say("Stopping this exercise. Skip anything that sends symptoms down the leg, and keep the rest of today gentle.", {interrupt:true});
-  gNote("Logged. Skipping this exercise.");
-  const curEx = G.segs[G.i].exIndex; const idx = G.segs.findIndex(s=>s.exIndex === curEx + 1);
-  gGoto(idx < 0 ? G.segs.length-1 : idx);
+  const L = dayLog(), id = G.segs[G.i]?.id;
+  L.sym = "leg"; L.skipped = [...new Set([...(L.skipped || []), ...(id ? [id] : [])])]; save();
+  gClose();
+  setStatus("Session stopped. The exercise you stopped is left out for today; any new session uses the reduced routine.");
+  VOICE.say("Session stopped. Skip anything that sends symptoms down the leg.", {interrupt:true});
 }
 /* voice commands */
 function gListen(on){
@@ -5678,8 +5782,19 @@ function gListen(on){
 
 /* ================= events ================= */
 let timerState = null;
+document.getElementById("workout-record").addEventListener("close",()=>{
+  recordingId = null;
+  if(resumeAfterRecord && !document.getElementById("guide").hidden) gPause(false);
+  resumeAfterRecord = false;
+});
+document.addEventListener("submit",e=>{
+  if(e.target.id !== "record-form") return;
+  e.preventDefault(); saveRecord(e.target);
+});
 document.addEventListener("click", e=>{
   const t = e.target.closest("button"); if(!t) return;
+  if(t.hasAttribute("data-record-cancel")) return document.getElementById("workout-record").close();
+  if(t.dataset.record) return openRecord(t.dataset.record);
   if(t.dataset.g){
     const g = t.dataset.g;
     if(g === "start") return gOpen();
@@ -5687,6 +5802,7 @@ document.addEventListener("click", e=>{
     if(g === "play") return gPause(!G.paused);
     if(g === "next") return gJumpExercise(1);
     if(g === "back") return gJumpExercise(-1);
+    if(g === "record") return openRecord(G.segs[G.i]?.id);
     if(g === "voice"){ VOICE.on = !VOICE.on; if(!VOICE.on && window.speechSynthesis) speechSynthesis.cancel(); gSyncButtons(); return; }
     if(g === "listen") return gListen(!G.listening);
     if(g === "leg") return gLeg();
