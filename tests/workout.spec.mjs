@@ -162,3 +162,74 @@ test("record form fits a phone viewport", async ({ page }, testInfo) => {
   await expect(page.getByRole("button", { name:"Save entry", exact:true })).toBeVisible();
   await page.locator("#workout-record").screenshot({ path:testInfo.outputPath("record-phone.png") });
 });
+
+test("a weight left blank today stays blank when the entry is edited", async ({ page }) => {
+  await openApp(page, { training:true }); // yesterday's goblet entry has 25 lb
+  await page.locator('#view-today [data-record="goblet"]').click();
+  await page.locator('#record-form [name="weight"]').fill("");
+  await page.locator('#record-form [name="reps"]').fill("8, 8");
+  await page.getByRole("button", { name:"Save entry", exact:true }).click();
+  await page.locator('#view-today [data-record="goblet"]').click();
+  await expect(page.locator('#record-form [name="weight"]')).toHaveValue("");
+  await page.locator('#record-form [name="notes"]').fill("Bodyweight only today.");
+  await page.getByRole("button", { name:"Save entry", exact:true }).click();
+  expect(await page.evaluate(() => dayLog().training.goblet.weight)).toBeNull();
+});
+
+test("walks and holds have no weight field and save without one", async ({ page }) => {
+  await openApp(page);
+  await page.locator('#view-today [data-record="walk"]').click();
+  await expect(page.locator('#record-form [name="weight"]')).toHaveCount(0);
+  await expect(page.locator('#record-form [name="unit"]')).toHaveCount(0);
+  await page.locator('#record-form [name="reps"]').fill("12");
+  await page.getByRole("button", { name:"Save entry", exact:true }).click();
+  expect(await page.evaluate(() => dayLog().training.walk)).toMatchObject({ weight:null, unit:"lb", reps:"12" });
+  await expect(page.locator('#view-today [data-id="walk"] .last-entry')).toHaveText("Today: 12 min");
+});
+
+test("an exercise stopped by mistake can be put back", async ({ page }) => {
+  await openApp(page);
+  await page.locator('[data-g="start"]').click();
+  await page.getByRole("button", { name:"Symptoms going down the leg", exact:true }).click();
+  await expect(page.locator('#view-today [data-id="walk"]')).toHaveCount(0);
+  await expect(page.locator(".stopped")).toContainText("Walk");
+  await page.getByRole("button", { name:"Put back", exact:true }).click();
+  await expect(page.locator(".stopped")).toHaveCount(0);
+  await expect(page.locator('#view-today [data-id="walk"]')).toBeVisible();
+  expect(await page.evaluate(() => dayLog().skipped)).toEqual([]);
+  // The check-in is separate: the day stays reduced until it is changed too.
+  expect(await page.evaluate(() => sessionIds())).toEqual(["walk","curl","bird","glide"]);
+  await page.getByRole("button", { name:"None", exact:true }).click();
+  await expect(page.locator('#view-today [data-id="goblet"]')).toBeVisible();
+});
+
+test("a completed reduced day counts as a full day, and a stopped exercise is not required", async ({ page }) => {
+  await openApp(page, { symptoms:["leg"] });
+  await page.evaluate(() => { dayLog().done = ["walk","curl","bird","glide"]; save(); renderProgress(); });
+  await page.getByRole("tab", { name:"Progress", exact:true }).click();
+  await expect(page.locator(".day.today")).toHaveClass(/\bfull\b/);
+  await expect(page.locator(".stat b").first()).toHaveText("1");
+
+  await page.evaluate(() => { const L = dayLog(); L.done = ["curl","bird","glide"]; L.skipped = ["walk"]; save(); renderProgress(); });
+  await expect(page.locator(".day.today")).toHaveClass(/\bfull\b/);
+  await page.evaluate(() => { const L = dayLog(); L.done = ["curl"]; save(); renderProgress(); });
+  await expect(page.locator(".day.today")).toHaveClass(/\bpart\b/);
+  // Stopping every exercise is not a completed day.
+  await page.evaluate(() => { const L = dayLog(); L.done = []; L.skipped = ["walk","curl","bird","glide"]; save(); renderProgress(); });
+  await expect(page.locator(".day.today")).not.toHaveClass(/\bfull\b/);
+});
+
+test("the symptom count shows through yesterday until today's check-in", async ({ page }) => {
+  await openApp(page, { symptoms:["missing", ...Array(25).fill("none")] });
+  await page.getByRole("tab", { name:"Progress", exact:true }).click();
+  const history = page.locator("#symptom-history");
+  await expect(history).toContainText("25 consecutive daily check-ins");
+  await expect(history).toContainText("through yesterday");
+  await expect(history).toContainText("three weeks or more");
+  await expect(history).toContainText("No check-in yet today");
+  await page.getByRole("tab", { name:"Today", exact:true }).click();
+  await page.getByRole("button", { name:"Back or buttock only", exact:true }).click();
+  await page.getByRole("tab", { name:"Progress", exact:true }).click();
+  await expect(history).toContainText("26 consecutive daily check-ins");
+  await expect(history).toContainText("through today");
+});

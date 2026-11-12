@@ -3715,6 +3715,7 @@ section.block{margin:0 0 28px}
 .record-dialog [role=alert]{color:var(--alert)}.history-entry{padding:14px 16px;border-bottom:1px solid var(--line);overflow-wrap:anywhere}.history-entry p{margin:6px 0;white-space:pre-wrap}.history-entry small{color:var(--muted)}
 .g-record{display:flex;justify-content:space-between;align-items:center;gap:12px;color:var(--muted);font-size:13px}.g-record .record-btn{color:inherit}
 button:disabled{opacity:.5;cursor:default}
+.stopped{margin:0 0 28px}.stopped p{margin:0 0 10px}.stopped-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:6px 0;color:var(--ink)}
 
 .detail{padding:0 12px 16px}
 .detail[hidden]{display:none}
@@ -5348,8 +5349,8 @@ function openRecord(id){
   dialog.innerHTML = `<form id="record-form"><h2 id="record-title">Record ${escapeHTML(EX[id].name)}</h2>
     <p class="small">Today's entry. Saving again updates this entry.</p>
     ${previous ? `<div class="previous-entry"><strong>Last time · ${entryDate(previous.date)}</strong>\n${escapeHTML(recordSummary(previous))}${previous.notes ? "\n"+escapeHTML(previous.notes) : ""}</div>` : '<p class="small">Your first recorded entry for this exercise.</p>'}
-    <div class="record-grid"><label>${["row","rdl","press"].includes(id) ? "Weight per dumbbell" : "Weight / load"} (optional)<input name="weight" type="number" min="0" max="5000" step="0.25" value="${escapeHTML(values.weight ?? previous?.weight ?? "")}"></label>
-    <label>Unit<select name="unit"><option value="lb" ${unit === "lb" ? "selected" : ""}>lb</option><option value="kg" ${unit === "kg" ? "selected" : ""}>kg</option></select></label></div>
+    ${kind === "reps" ? `<div class="record-grid"><label>${["row","rdl","press"].includes(id) ? "Weight per dumbbell" : "Weight / load"} (optional)<input name="weight" type="number" min="0" max="5000" step="0.25" value="${escapeHTML((current ? current.weight : previous?.weight) ?? "")}"></label>
+    <label>Unit<select name="unit"><option value="lb" ${unit === "lb" ? "selected" : ""}>lb</option><option value="kg" ${unit === "kg" ? "selected" : ""}>kg</option></select></label></div>` : ""}
     <label>${measure}<input name="reps" maxlength="100" placeholder="${kind === "timed" ? "10" : kind === "hold" ? "10, 10, 8" : "10, 9, 8"}" value="${escapeHTML(values.reps || "")}" aria-describedby="record-measure-help"></label>
     <p class="small" id="record-measure-help">${kind === "timed" ? "Enter the minutes you actually completed." : "Separate each set or hold with a comma. For two-sided exercises, record each side in order and identify it in notes."}</p>
     <label>Difficulty<select name="difficulty"><option value="">Not recorded</option>${["Easy","Moderate","Hard"].map(d=>`<option ${values.difficulty === d ? "selected" : ""}>${d}</option>`).join("")}</select></label>
@@ -5364,10 +5365,11 @@ function saveRecord(form){
   const pattern = timed ? /^\d{1,3}(\.\d{1,2})?$/ : /^\d{1,3}(\s*,\s*\d{1,3}){0,19}$/;
   const error = message=>{ document.getElementById("record-error").textContent = message; };
   if(raw && !pattern.test(raw)) return error(timed ? "Enter minutes as a number, such as 10 or 10.5." : "Enter whole numbers separated by commas, such as 10, 9, 8 (up to 20 values).");
-  const weight = data.get("weight") === "" ? null : Number(data.get("weight")), notes = String(data.get("notes")).trim(), difficulty = String(data.get("difficulty"));
+  // Walks and holds have no weight field, so the value can be absent as well as blank.
+  const rawWeight = data.get("weight"), weight = rawWeight === null || rawWeight === "" ? null : Number(rawWeight), notes = String(data.get("notes")).trim(), difficulty = String(data.get("difficulty"));
   if(weight === null && !raw && !notes && !difficulty) return error("Record a weight, completed amount, difficulty, or note before saving.");
   const L = dayLog(); L.training ||= {};
-  L.training[id] = {weight,unit:String(data.get("unit")),reps:raw ? raw.split(",").map(n=>String(Number(n.trim()))).join(", ") : "",difficulty,notes,updated:Date.now()};
+  L.training[id] = {weight,unit:data.get("unit") === "kg" ? "kg" : "lb",reps:raw ? raw.split(",").map(n=>String(Number(n.trim()))).join(", ") : "",difficulty,notes,updated:Date.now()};
   if(data.has("complete")){ if(!L.done.includes(id)) L.done.push(id); }
   else L.done = L.done.filter(done=>done !== id);
   const stored = save();
@@ -5458,6 +5460,10 @@ function renderToday(){
     </div>
     ${L.sym==='leg'?`<div class="warn">${WARN}<span>Keep today to the walk, curl-up, bird dog and gentle nerve glides, and skip anything that makes it spread further. If this keeps happening or you notice new weakness or numbness, check in with your doctor or PT.</span></div>`:''}
   </div>`;
+  const stopped = (L.skipped || []).filter(id=>Object.hasOwn(EX,id));
+  if(stopped.length){
+    h += `<div class="rest stopped"><p>Left out today because you reported leg symptoms during it. Put one back only if that was a mistake.</p>${stopped.map(id=>`<div class="stopped-row"><span>${escapeHTML(EX[id].name)}</span><button class="record-btn" data-unskip="${id}">Put back</button></div>`).join("")}</div>`;
+  }
   h += `<section class="block"><div class="shead"><h2>${plan.reduced ? "Reduced routine" : "Daily spine routine"}</h2><span class="count">${dDone} of ${daily.length}</span></div>
     <p class="bnote">${plan.reduced ? "The guided session uses this reduced list. Skip any movement that makes symptoms spread further." : "Tap an exercise to see it move."}${(L.skipped || []).length ? " Exercises stopped for leg symptoms stay out of today's session." : ""}</p>
     <div class="group">${daily.map(i=>exItem(i,"t",true)).join("")}</div></section>`;
@@ -5487,19 +5493,32 @@ function renderProgram(){
   document.getElementById("view-program").innerHTML = h;
   remount3D();
 }
-function dayStatus(k){ const L = S.log[k]; if(!L) return {cls:"",leg:false}; const d = PROGRAM.daily.filter(i=>L.done.includes(i)).length; return {cls: d===PROGRAM.daily.length ? "full" : (L.done.length || Object.keys(L.training || {}).length ? "part" : ""), leg: L.sym==="leg"}; }
+function dayStatus(k){
+  const L = S.log[k]; if(!L) return {cls:"",leg:false};
+  // A day is full when everything asked of it was done: the reduced routine
+  // on a leg-symptom day, minus anything stopped for symptoms.
+  const required = (L.sym === "leg" ? REDUCED_ROUTINE : PROGRAM.daily).filter(id=>!(L.skipped || []).includes(id));
+  const full = required.length > 0 && required.every(id=>L.done.includes(id));
+  return {cls: full ? "full" : (L.done.length || Object.keys(L.training || {}).length ? "part" : ""), leg: L.sym==="leg"};
+}
 function symptomHistory(today = new Date()){
+  const current = S.log[todayKey(today)]?.sym;
+  if(current === "leg") return "Today's check-in records symptoms traveling down the leg.";
+  // Count back from today, or from yesterday while today is still unlogged.
+  const checkedIn = current === "none" || current === "central";
   const cursor = new Date(today); cursor.setHours(0,0,0,0);
+  if(!checkedIn) cursor.setDate(cursor.getDate()-1);
   let days = 0;
   for(let i=0;i<120;i++){
     const sym = S.log[todayKey(cursor)]?.sym;
     if(sym !== "none" && sym !== "central") break;
     days++; cursor.setDate(cursor.getDate()-1);
   }
-  const current = S.log[todayKey(today)]?.sym;
-  if(current === "leg") return "Today's check-in records symptoms traveling down the leg.";
   if(!days) return "No symptom check-in today. Unlogged days are unknown and do not count toward a symptom-free streak.";
-  return `${days} consecutive daily check-in${days === 1 ? "" : "s"} without symptoms down the leg, through today. Unlogged days break this count.`;
+  const count = `${days} consecutive daily check-in${days === 1 ? "" : "s"} without symptoms down the leg`;
+  const weeks = days >= 21 ? " That is three weeks or more." : "";
+  return checkedIn ? `${count}, through today.${weeks} Unlogged days break this count.`
+    : `${count}, through yesterday.${weeks} No check-in yet today; check in to keep the count going.`;
 }
 function renderProgress(){
   const today = new Date(); today.setHours(0,0,0,0);
@@ -5516,7 +5535,7 @@ function renderProgress(){
   document.getElementById("view-progress").innerHTML = `<section class="block"><div class="stats">
       <div class="stat"><b>${streak}</b><span>day streak</span></div><div class="stat"><b>${logged}</b><span>days trained</span></div></div>
     <div class="calcard"><div class="cal">${cells}</div>
-    <div class="calkey"><span><i style="background:var(--accent)"></i>Full daily routine</span><span><i style="background:color-mix(in srgb,var(--accent) 35%,var(--soft))"></i>Partial</span><span><i style="background:var(--alert)"></i>Leg symptoms</span></div></div></section>
+    <div class="calkey"><span><i style="background:var(--accent)"></i>Day's routine complete</span><span><i style="background:color-mix(in srgb,var(--accent) 35%,var(--soft))"></i>Partial</span><span><i style="background:var(--alert)"></i>Leg symptoms</span></div></div></section>
   <section class="block"><div class="shead"><h2>Ready for real lifting</h2><span class="count">${MILESTONES.filter(m=>S.milestones[m.id]).length} of 4</span></div>
     <p class="bnote" id="symptom-history">${symptomHistory(today)}</p>
     <div class="group">${MILESTONES.map(m=>`<button class="ms" data-ms="${m.id}" aria-pressed="${!!S.milestones[m.id]}"><span class="box">${CHECK}</span><span>${m.t}</span></button>`).join("")}</div>
@@ -5795,6 +5814,7 @@ document.addEventListener("click", e=>{
   const t = e.target.closest("button"); if(!t) return;
   if(t.hasAttribute("data-record-cancel")) return document.getElementById("workout-record").close();
   if(t.dataset.record) return openRecord(t.dataset.record);
+  if(t.dataset.unskip){ const L = dayLog(); L.skipped = (L.skipped || []).filter(id=>id !== t.dataset.unskip); save(); renderToday(); return; }
   if(t.dataset.g){
     const g = t.dataset.g;
     if(g === "start") return gOpen();
