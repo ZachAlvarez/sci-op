@@ -21,6 +21,24 @@
 
 Progress is stored only in the browser (`localStorage`) when run outside claude.ai. No workout video is uploaded by the coach, but clearing browser data or switching devices removes locally stored progress. Export/import is not available yet.
 
+## Coach voice
+
+Guided sessions use a bundled American male AI voice, with laid-back,
+California-inspired phrasing, a little flirt, and unhurried encouragement. Hear it in
+**Program → Coach voice → Preview voice**. The
+same voice also introduces sections, confirms saved entries and milestones,
+guides standalone holds, and speaks in the optional camera coach. A global
+**Voice on/off** button controls all speech; Program has a separate switch for
+section introductions and confirmations. You can request today's plan or
+exercise instructions aloud. Audio starts after a click or tap. The
+same recordings play across devices, with no account or speech-service subscription.
+Pause, skip, close and mute stop speech immediately; mute is remembered locally.
+
+Serve the full app over HTTP(S) for the bundled voice. If a clip cannot load,
+the app labels its device-voice fallback (which sounds different). Late counts
+are skipped instead of queued, and form instructions can finish across a spoken
+rep count while the visual counter continues. See [voice sources and rebuilding](assets/coach/README.md).
+
 ## Development
 
 ```sh

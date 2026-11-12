@@ -1,4 +1,6 @@
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
+import { runInNewContext } from "node:vm";
+import { coachCatalog } from "./coach-catalog.mjs";
 
 const files = ["index.html", "form-coach.html"];
 const scriptTag = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
@@ -38,5 +40,18 @@ for (const file of files) {
 
 // The optional figure study has a standalone classic script.
 new Function(await readFile("figure-preview.js", "utf8"));
+new Function(await readFile("coach-voice.js", "utf8"));
+
+const voiceContext = { window: {} };
+runInNewContext(await readFile("assets/coach/manifest.js", "utf8"), voiceContext);
+const phrases = await coachCatalog();
+for (const phrase of phrases) {
+  const clip = voiceContext.window.COACH_CLIPS[phrase.text];
+  if (!clip || clip.file !== phrase.file || !(clip.duration > 0)) {
+    throw new Error(`Missing or outdated coach clip: ${phrase.text}. Rebuild the voice pack.`);
+  }
+  if ((await stat(clip.file)).size < 256) throw new Error(`Empty coach clip: ${clip.file}`);
+}
 
 console.log(`Validated ${files.length} HTML files and ${totalScripts} executable inline scripts.`);
+console.log(`Validated ${phrases.length} bundled coach phrases.`);

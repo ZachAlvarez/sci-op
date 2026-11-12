@@ -50,6 +50,8 @@ video,canvas.ov{position:absolute;inset:0;width:100%;height:100%;object-fit:cove
 <body>
 <div class="wrap" id="setup">
   <h1>Form Coach</h1>
+  <p><a href="index.html">Back to workout</a> · <button id="hearSetup">Hear setup</button></p>
+  <p><button id="setupVoiceBtn" aria-pressed="true">Voice on</button> <span id="setupVoiceStatus">American male · AI voice</span></p>
   <p class="sub">Counts reps and flags a few form checks from your camera. Everything runs on this device; no video leaves it.</p>
   <div class="group" id="exList"></div>
   <div class="seg" role="group" aria-label="Camera"><button data-cam="user" aria-pressed="true">Front camera</button><button data-cam="environment" aria-pressed="false">Back camera</button></div>
@@ -72,9 +74,12 @@ video,canvas.ov{position:absolute;inset:0;width:100%;height:100%;object-fit:cove
   </div>
   <div class="status" id="status"></div>
   <div class="cue" id="cue"></div>
+  <p style="position:absolute;top:90px;left:16px;color:white;font-size:12px" id="voiceStatus">American male · AI voice</p>
   <div class="bar"><button id="voiceBtn">Voice on</button><button id="resetBtn">New set</button><button class="end" id="endBtn">End</button></div>
 </div>
 
+<script src="assets/coach/manifest.js"></script>
+<script src="coach-voice.js"></script>
 <script type="module">
 import {PoseLandmarker, FilesetResolver} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
 
@@ -89,20 +94,31 @@ const EXS = {
 };
 const L = {nose:0, lEar:7, rEar:8, lSh:11, rSh:12, lEl:13, rEl:14, lWr:15, rWr:16, lHip:23, rHip:24, lKn:25, rKn:26, lAn:27, rAn:28, lHeel:29, rHeel:30, lToe:31, rToe:32};
 const EDGES = [[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24],[23,25],[25,27],[24,26],[26,28],[27,31],[28,32],[27,29],[28,30]];
-let ex = "goblet", facing = "user", voiceOn = true;
+let ex = "goblet", facing = "user";
 
 /* ---------- setup UI ---------- */
 const list = document.getElementById("exList");
 list.innerHTML = Object.entries(EXS).map(([k,v])=>`<button class="opt" data-ex="${k}" aria-pressed="${k===ex}"><div><b>${v.name}</b><span>${v.kind === "hold" ? "Hold timer, form check" : "Rep counter, form check"}</span></div><i class="dot"></i></button>`).join("");
 function syncSetup(){ document.querySelectorAll("[data-ex]").forEach(b=>b.setAttribute("aria-pressed", b.dataset.ex === ex)); document.querySelectorAll("[data-cam]").forEach(b=>b.setAttribute("aria-pressed", b.dataset.cam === facing)); document.getElementById("placeNote").textContent = "Setup: " + EXS[ex].place; }
-document.addEventListener("click", e=>{ const b = e.target.closest("button"); if(!b) return; if(b.dataset.ex){ ex = b.dataset.ex; syncSetup(); } if(b.dataset.cam){ facing = b.dataset.cam; syncSetup(); } });
+document.addEventListener("click", e=>{ const b = e.target.closest("button"); if(!b) return; if(b.dataset.ex){ ex = b.dataset.ex; syncSetup(); VOICE.cancel(); VOICE.unlock(); if(VOICE.navigation) VOICE.say(`${EXS[ex].name}. ${EXS[ex].place}`); } if(b.dataset.cam){ facing = b.dataset.cam; syncSetup(); } });
 syncSetup();
 
 /* ---------- voice ---------- */
-let voice = null;
-function pickVoice(){ const vs = speechSynthesis.getVoices(); for(const n of ["Samantha","Ava","Allison","Google US English","Microsoft Aria","Microsoft Jenny"]){ const v = vs.find(x=>x.name.includes(n)); if(v){ voice = v; return; } } voice = vs.find(v=>/^en/i.test(v.lang)) || null; }
-if(window.speechSynthesis){ pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
-function say(t, interrupt){ if(!voiceOn || !window.speechSynthesis) return; if(interrupt) speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(t); if(voice) u.voice = voice; u.rate = 1.03; speechSynthesis.speak(u); }
+const VOICE = new CoachVoice(window.COACH_CLIPS || {});
+VOICE.onchange = ()=>{
+  const button = document.getElementById("voiceBtn");
+  button.textContent = VOICE.on ? "Voice on" : "Voice off";
+  button.setAttribute("aria-pressed", VOICE.on);
+  const setupButton = document.getElementById("setupVoiceBtn");
+  setupButton.textContent = button.textContent;
+  setupButton.setAttribute("aria-pressed", VOICE.on);
+  document.getElementById("setupVoiceStatus").textContent = VOICE.status;
+  document.getElementById("voiceStatus").textContent = VOICE.status;
+};
+VOICE.onchange();
+function say(t){ VOICE.say(t, {timed:true}); }
+document.getElementById("hearSetup").onclick = ()=>{ VOICE.unlock(); VOICE.say(`${EXS[ex].name}. ${EXS[ex].place}`); };
+document.getElementById("setupVoiceBtn").onclick = ()=>{ VOICE.setEnabled(!VOICE.on); VOICE.unlock(); };
 const cueLast = {}; let lastAnyCue = 0;
 function cue(key, text, minGap){
   const now = performance.now(); document.getElementById("cue").textContent = text;
@@ -230,7 +246,8 @@ async function loadModel(){
 }
 async function start(){
   const thisSession = ++sessionId;
-  if(window.speechSynthesis){ speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(" "); u.volume = 0; speechSynthesis.speak(u); }
+  VOICE.cancel(); VOICE.unlock();
+  VOICE.preload([`${EXS[ex].name}. ${EXS[ex].place}`, "1", "2", "3"]);
   const status = document.getElementById("status");
   document.getElementById("live").classList.add("on"); document.getElementById("setup").style.display = "none";
   document.getElementById("exName").textContent = EXS[ex].name;
@@ -250,7 +267,7 @@ async function start(){
   try{ await loadModel(); }catch(e){ stop(); status.textContent = "Couldn't load the pose model. Check your connection."; return; }
   if(thisSession !== sessionId) return;
   status.textContent = ""; document.getElementById("stateLbl").textContent = "Step into frame";
-  say(`${EXS[ex].name}. ${EXS[ex].place}`);
+  VOICE.say(`${EXS[ex].name}. ${EXS[ex].place}`);
   running = true; lastT = 0; lastSeen = 0; lastVideoTime = -1; loop();
 }
 function stop(){
@@ -258,7 +275,7 @@ function stop(){
   running = false; cancelAnimationFrame(raf);
   if(stream){ stream.getTracks().forEach(t=>t.stop()); stream = null; }
   vid.srcObject = null;
-  if(window.speechSynthesis) speechSynthesis.cancel();
+  VOICE.cancel();
 }
 let lastVideoTime = -1;
 function loop(){
@@ -293,12 +310,13 @@ function end(){
   const names = {lean:"Torso leaning", tempo:"Lowering too fast", knee:"Hinge turning into a squat", neck:"Head out of line", deep:"Going too deep", arch:"Arching past straight", level:"Hips uneven", sag:"Hips sagging", high:"Leg lifted too high", tilt:"Back not flat", frame:"Out of frame"};
   const rows = sets.map((s,i)=>`<div class="row"><b>Set ${i+1}</b><span>${s}</span></div>`).join("") + Object.entries(flags).map(([k,n])=>`<div class="row"><b>${names[k]||k}</b><span>${n} cue${n>1?"s":""}</span></div>`).join("");
   document.getElementById("sumRows").innerHTML = rows || `<div class="row"><b>No reps recorded</b><span></span></div>`;
+  VOICE.say(COACH_LINES.cameraDone);
 }
 document.getElementById("go").onclick = start;
 document.getElementById("endBtn").onclick = end;
 document.getElementById("resetBtn").onclick = ()=>{ resetSet(); say("New set."); };
-document.getElementById("voiceBtn").onclick = e=>{ voiceOn = !voiceOn; e.target.textContent = voiceOn ? "Voice on" : "Voice off"; if(!voiceOn) speechSynthesis.cancel(); };
-document.getElementById("again").onclick = ()=>{ document.getElementById("sum").classList.remove("on"); document.getElementById("setup").style.display = ""; };
+document.getElementById("voiceBtn").onclick = ()=>{ VOICE.setEnabled(!VOICE.on); VOICE.unlock(); };
+document.getElementById("again").onclick = ()=>{ VOICE.cancel(); document.getElementById("sum").classList.remove("on"); document.getElementById("setup").style.display = ""; };
 window.addEventListener("pagehide", stop);
 </script>
 </body>
