@@ -3738,6 +3738,10 @@ button:disabled{opacity:.5;cursor:default}
 .cues{margin:12px 0 0;padding-left:20px}
 .cues li{margin:5px 0;font-size:16px}
 .cues li::marker{color:var(--muted)}
+.video-link{display:flex;align-items:center;gap:12px;margin-top:12px;padding:10px 14px;border:1px solid var(--line);border-radius:12px;color:var(--ink);text-decoration:none}
+.video-link svg{flex:none;color:var(--muted)}
+.video-link b{display:block;font-size:15px;font-weight:600}
+.video-link small{display:block;font-size:13px;line-height:1.35;color:var(--muted);overflow-wrap:anywhere}
 .stopif{margin-top:12px;background:var(--soft);border-left:3px solid var(--alert);border-radius:6px 12px 12px 6px;padding:10px 14px 10px 12px;font-size:15px;display:flex;gap:10px}
 .stopif svg{flex:none;margin-top:2px;color:var(--alert)}
 .timer{margin-top:12px;width:100%;border:0;background:var(--fill);border-radius:12px;padding:13px;font-weight:600;font-size:16px;cursor:pointer}
@@ -4131,6 +4135,37 @@ for(const id of ["row","rdl","press"]) for(const pose of [HUMAN_P3[id].A,HUMAN_P
   pose.hdN = pose.faN; pose.hdF = pose.faF || pose.faN;
 }
 
+/* A video of a real person doing each exercise, for when the animation is not
+   enough: [YouTube video id, channel, optional note on how it differs].
+   Kept as plain JSON so scripts/check-videos.mjs can read it. */
+const VIDEOS = {
+  "walk":["rsGGZXeq5IM","Bob & Brad","Covers how to walk when sciatica is active."],
+  "curl":["EiicBbQknBk","Physical Therapy & Hand Clinic of Hillsboro"],
+  "sideK":["lvpPNjRQONQ","National Academy of Sports Medicine (NASM)"],
+  "bird":["LB3e4JBpNrw","InVivo Spine"],
+  "glide":["A42tSJ_7-CM","Physical Therapy First"],
+  "calf":["hVqnP-pJhAE","LAR Physical Therapy"],
+  "slack":["qjV_UTtCJkE","GIBBON SlackBoards and SlackLines"],
+  "bridge":["tl6xvm4-Qk0","Squat University"],
+  "deadbug":["g_BYB0R-4Ws","Children's Hospital Colorado"],
+  "pullapart":["pASXdGKh-nc","OPEX Fitness"],
+  "goblet":["nfTnWMX4U3I","PT Growth Academy"],
+  "row":["FH6ojvtTV44","Testosterone Nation"],
+  "hinge":["ctMrDzw8LYQ","Champion Physical Therapy and Performance"],
+  "lateral":["g0O6nPe0piY","Made Possible Personal Training"],
+  "rdl":["hQgFixeXdZo","J2FIT Strength & Conditioning"],
+  "split":["-4LVK1crLSw","Squat University"],
+  "press":["T0Y3OBF1bNI","PureGym"],
+  "slbridge":["3NXv0Nany-Q","Orillia Sports Medicine and Rehabilitation"],
+  "sideF":["VAPN4CmUWqk","Northern Nevada Chiropractic"],
+  "slsquat":["qh_okUZfwcA","Endurance Physio","Shown on the floor. Here it is done on the slackboard."]
+};
+function videoLinkHTML(id){
+  const v = VIDEOS[id]; if(!v) return "";
+  return `<a class="video-link" href="https://www.youtube.com/watch?v=${encodeURIComponent(v[0])}" target="_blank" rel="noopener noreferrer">
+    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10 8.2v7.6l6-3.8z" fill="currentColor"/></svg>
+    <span><b>Watch a person do this</b><small>${escapeHTML(v[1])} on YouTube${v[2] ? ". " + escapeHTML(v[2]) : ""}</small></span></a>`;
+}
 const DOSE = {
  walk:{type:"timed", secs:600},
  curl:{type:"hold", holds:5, secs:10, rest:4, midNote:"Switch the bent leg."},
@@ -5416,6 +5451,7 @@ function exItem(id, scope, checkable){
       </div>` : `<p class="small" style="margin:0 2px">Pre-rendered view: ${V3.reason}, so camera angles are fixed here. Open this page in Chrome for the rotatable 3D version.</p>`}` : ''}
       <ul class="cues">${ex.cues.map(c=>`<li>${c}</li>`).join("")}</ul>
       <button class="record-btn" data-hear="${id}">Hear exercise instructions</button>
+      ${videoLinkHTML(id)}
       <div class="stopif">${WARN}<span>${ex.stop}</span></div>
       ${ex.hold?`<button class="timer" data-timer="${id}">Start ${ex.hold}-second hold timer</button>`:''}
     </div>

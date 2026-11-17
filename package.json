@@ -6,7 +6,8 @@
   "scripts": {
     "validate": "node scripts/validate-html.mjs",
     "serve": "node scripts/serve.mjs",
-    "test": "playwright test"
+    "test": "playwright test",
+    "check-videos": "node scripts/check-videos.mjs"
   },
   "engines": {
     "node": ">=20"

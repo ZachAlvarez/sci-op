@@ -233,3 +233,24 @@ test("the symptom count shows through yesterday until today's check-in", async (
   await expect(history).toContainText("26 consecutive daily check-ins");
   await expect(history).toContainText("through today");
 });
+
+test("every exercise links to a video of a person doing it", async ({ page }) => {
+  await openApp(page);
+  const table = await page.evaluate(() => ({ videos: VIDEOS, exercises: Object.keys(EX) }));
+  expect(Object.keys(table.videos).sort()).toEqual([...table.exercises].sort());
+  for (const [id, channel] of Object.values(table.videos)) {
+    expect(id).toMatch(/^[\w-]{11}$/); // YouTube video ids are 11 characters
+    expect(channel.length).toBeGreaterThan(0);
+  }
+
+  await page.locator('#view-today .exmain[data-open="t-bird"]').click();
+  const link = page.locator('#view-today [data-id="bird"] .video-link');
+  await expect(link).toBeVisible();
+  await expect(link).toHaveAttribute("href", `https://www.youtube.com/watch?v=${table.videos.bird[0]}`);
+  await expect(link).toHaveAttribute("target", "_blank"); // opens outside the app, so progress is not lost
+  await expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  await expect(link).toContainText(table.videos.bird[1]);
+
+  await page.getByRole("tab", { name:"Program", exact:true }).click();
+  expect(await page.locator("#view-program .video-link").count()).toBe(await page.locator("#view-program .ex").count());
+});
