@@ -3973,7 +3973,7 @@ const EX = {
   B:{h:[82,17],n:[79,27],p:[74,52],k:[84,68],a:[74,82],t:[95,78]},
   cues:["Heels low, toes up on the slant.","First set straight-legged (upper calf), second set with knees bent forward (lower calf and Achilles).","Hold a wall or doorframe if needed."],
   stop:"Stop if it provokes pain behind the knee or down the leg."},
- slack:{name:"Slackboard balance",dose:"3 × 30 s per foot",props:P_slack,noFloor:true,
+ slack:{name:"Slackboard balance",dose:"3 × 30 s per foot",hold:30,reps:6,props:P_slack,noFloor:true,
   A:{h:[80,13],n:[80,24],p:[80,52],k:[78,68],a:[78,83],e:[70,34],w:[62,26],k2:[86,67],a2:[86,82],e2:[90,34],w2:[98,26]},
   B:{h:[80,13],n:[80,24],p:[80,52],k:[78,68],a:[78,83],e:[70,34],w:[62,26],k2:[91,57],a2:[89,71],e2:[90,34],w2:[98,26]},
   cues:["Hold the dual band for support at first, lightly.","Stand on one foot, soft knee, squeeze the standing-side glute.","Progress: lighter grip on the band, then eyes forward and no hands."],
@@ -5946,11 +5946,18 @@ function runTimer(btn){
   if(timerState){ clearInterval(timerState.iv); timerState.btn.classList.remove("run"); }
   let rep = 1, left = ex.hold, resting = false; btn.classList.add("run");
   VOICE.say(COACH_LINES.timerStart);
-  const draw = ()=>{ btn.textContent = resting ? `Rest ${left} s, then rep ${rep} of ${ex.reps}` : `Hold ${left} s, rep ${rep} of ${ex.reps}. Tap to stop`; };
+  // Two-sided holds do the first half on the right, then switch to the left.
+  const id = btn.dataset.timer, twoSided = DOSE[id]?.sides === 2, part = id === "slack" ? "foot" : "side";
+  const side = r=>twoSided ? (r <= ex.reps/2 ? `right ${part}` : `left ${part}`) : "";
+  const draw = ()=>{
+    const where = side(rep), switching = resting && twoSided && rep === ex.reps/2 + 1;
+    btn.textContent = resting ? `Rest ${left} s, then ${switching ? `switch to ${where}, ` : ""}rep ${rep} of ${ex.reps}`
+      : `Hold ${left} s, rep ${rep} of ${ex.reps}${where ? `, ${where}` : ""}. Tap to stop`;
+  };
   draw();
   const iv = setInterval(()=>{ left--;
     if(left<=0){ try{ navigator.vibrate && navigator.vibrate(resting?80:[120,60,120]); }catch(e){}
-      if(!resting){ if(rep>=ex.reps){ clearInterval(iv); timerState=null; btn.classList.remove("run"); btn.textContent="Done. Tap to run again"; VOICE.say(COACH_LINES.timerDone); return; } rep++; resting = true; left = 5; VOICE.say(COACH_LINES.timerRest); }
+      if(!resting){ if(rep>=ex.reps){ clearInterval(iv); timerState=null; btn.classList.remove("run"); btn.textContent="Done. Tap to run again"; VOICE.say(COACH_LINES.timerDone); return; } rep++; resting = true; left = twoSided && rep === ex.reps/2 + 1 ? 10 : 5; VOICE.say(COACH_LINES.timerRest); }
       else { resting = false; left = ex.hold; VOICE.say(COACH_LINES.timerNext); } }
     draw(); },1000);
   timerState = {btn, iv};

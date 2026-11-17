@@ -254,3 +254,21 @@ test("every exercise links to a video of a person doing it", async ({ page }) =>
   await page.getByRole("tab", { name:"Program", exact:true }).click();
   expect(await page.locator("#view-program .video-link").count()).toBe(await page.locator("#view-program .ex").count());
 });
+
+test("the slackboard has a hold timer that names the foot", async ({ page }) => {
+  await page.clock.install();
+  await openApp(page);
+  await page.locator('#view-today .exmain[data-open="t-slack"]').click();
+  // Stop the 3D render loop; otherwise fast-forwarding the clock renders every frame.
+  await page.evaluate(() => V3.release());
+  const timer = page.locator('[data-key="t-slack"] [data-timer]');
+  await expect(timer).toHaveText("Start 30-second hold timer");
+  await timer.click();
+  await expect(timer).toContainText("Hold 30 s, rep 1 of 6, right foot");
+  await page.clock.runFor(3 * 30_000 + 2 * 5_000);   // holds 1–3 on the right, with two short rests
+  await expect(timer).toContainText("Rest 10 s, then switch to left foot, rep 4 of 6");
+  await page.clock.runFor(10_000);
+  await expect(timer).toContainText("Hold 30 s, rep 4 of 6, left foot");
+  await timer.click(); // stop
+  await expect(timer).toHaveText("Start 30-second hold timer");
+});
