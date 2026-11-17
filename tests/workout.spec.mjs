@@ -112,7 +112,10 @@ test("recorded work survives reload, shows the last session, and safely renders 
   await expect(page.locator('#record-form [name="weight"]')).toHaveValue("27.5");
   await expect(page.locator('#record-form [name="unit"]')).toHaveValue("kg");
   await expect(page.locator('#record-form [name="reps"]')).toHaveValue("");
-  await expect(page.locator('#record-form [name="complete"]')).not.toBeChecked();
+  // A new day starts a new entry: completion does not carry over, but saving
+  // a new entry marks it complete unless unchecked.
+  expect(await page.evaluate(() => dayLog().done)).not.toContain("goblet");
+  await expect(page.locator('#record-form [name="complete"]')).toBeChecked();
   await expect(page.locator(".previous-entry")).toContainText("Controlled lowering");
 });
 
@@ -135,7 +138,7 @@ test("recording during guidance pauses and restores the prior playback state", a
   await page.getByRole("button", { name:"Save entry", exact:true }).click();
   await expect.poll(() => page.evaluate(() => G.paused)).toBe(false);
   await expect(page.locator("#gPrevious")).toContainText("2.5 min");
-  expect(await page.evaluate(() => dayLog().done)).not.toContain("walk");
+  expect(await page.evaluate(() => dayLog().done)).toContain("walk"); // a new record defaults to complete
   await page.locator('[data-g="play"]').click();
   await page.getByRole("button", { name:"Record exercise", exact:true }).click();
   await page.getByRole("button", { name:"Cancel", exact:true }).click();
@@ -271,4 +274,55 @@ test("the slackboard has a hold timer that names the foot", async ({ page }) => 
   await expect(timer).toContainText("Hold 30 s, rep 4 of 6, left foot");
   await timer.click(); // stop
   await expect(timer).toHaveText("Start 30-second hold timer");
+});
+
+test("saving a new record marks the exercise complete unless unchecked", async ({ page }) => {
+  await openApp(page);
+  await page.locator('#view-today [data-record="goblet"]').click();
+  await expect(page.locator('#record-form [name="complete"]')).toBeChecked();
+  await page.locator('#record-form [name="reps"]').fill("10, 10");
+  await page.getByRole("button", { name:"Save entry", exact:true }).click();
+  expect(await page.evaluate(() => dayLog().done)).toContain("goblet");
+
+  await page.locator('#view-today [data-record="row"]').click();
+  await page.locator('#record-form [name="reps"]').fill("8, 8");
+  await page.locator('#record-form [name="complete"]').uncheck();
+  await page.getByRole("button", { name:"Save entry", exact:true }).click();
+  expect(await page.evaluate(() => dayLog().done)).not.toContain("row");
+});
+
+test("finishing the workout saves what was done and marks the rest skipped", async ({ page }) => {
+  await page.setViewportSize({ width:390, height:844 });
+  await openApp(page);
+  // Older records saved before completion defaulted on: recorded but not checked off.
+  await page.evaluate(() => {
+    const L = dayLog(); L.done = ["walk"];
+    L.training = { curl:{weight:null,unit:"lb",reps:"10, 10",difficulty:"",notes:"",updated:1} };
+    save(); renderToday();
+  });
+  await expect(page.locator(".hero [data-finish]")).toBeVisible(); // shortcut appears once something is done
+  await page.locator("#view-today .finish [data-finish]").click();
+  const form = page.locator("#finish-form");
+  await expect(form.locator('[value="walk"]')).toBeChecked();
+  await expect(form.locator('[value="curl"]')).toBeChecked();  // recorded counts as done
+  await expect(form.locator('[value="bird"]')).not.toBeChecked();
+  await form.locator('[value="bird"]').check();
+  await form.locator('[value="walk"]').uncheck();
+  await form.getByRole("button", { name:"Save workout", exact:true }).click();
+
+  await expect(page.locator("#workout-record")).toBeHidden();
+  await expect(page.locator("#saveStatus")).toContainText("Workout saved: 2 of");
+  await expect(page.locator("#view-today .finish")).toContainText("Workout saved at");
+  await expect(page.locator(".hero [data-finish]")).toHaveCount(0);
+  expect((await page.evaluate(() => dayLog().done)).sort()).toEqual(["bird","curl"]);
+  expect(await page.evaluate(() => typeof dayLog().finished)).toBe("number");
+
+  await page.reload();
+  await expect(page.locator("#view-today .finish")).toContainText("2 of");
+  await page.getByRole("button", { name:"Edit today's workout", exact:true }).click();
+  await expect(page.locator('#finish-form [value="bird"]')).toBeChecked();
+  const box = await page.locator("#workout-record").boundingBox();
+  expect(box.x + box.width).toBeLessThanOrEqual(390);
+  await page.getByRole("button", { name:"Cancel", exact:true }).click();
+  expect((await page.evaluate(() => dayLog().done)).sort()).toEqual(["bird","curl"]);
 });
