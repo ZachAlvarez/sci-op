@@ -1004,13 +1004,13 @@ window.COACH_CLIPS = {
     "file": "assets/coach/332bffd7dbf30a94.mp3",
     "duration": 2.983
   },
-  "Hold a broomstick along your spine: touching the back of your head, upper back and tailbone. Push the hips back, soft knees, and keep all three contact points as you tip forward. If a stick is not handy, use a band held straight behind you as a guide.": {
-    "file": "assets/coach/3cc76c1b4d7f1c11.mp3",
-    "duration": 14.401
+  "Hold the yoga stick along your spine: touching the back of your head, upper back and tailbone. Push the hips back, soft knees, and keep all three contact points as you tip forward. If a stick is not handy, use a band held straight behind you as a guide.": {
+    "file": "assets/coach/fce8322a4382a44d.mp3",
+    "duration": 14.542
   },
-  "Hip-hinge drill with dowel. 3 sets of 12 reps. Hold a broomstick along your spine: touching the back of your head, upper back and tailbone.": {
-    "file": "assets/coach/687df0b89d56c261.mp3",
-    "duration": 8.121
+  "Hip-hinge drill with dowel. 3 sets of 12 reps. Hold the yoga stick along your spine: touching the back of your head, upper back and tailbone.": {
+    "file": "assets/coach/aea1c2af51d89e04.mp3",
+    "duration": 8.716
   },
   "Push the hips back, soft knees, and keep all three contact points as you tip forward.": {
     "file": "assets/coach/d95697dd659988fa.mp3",
@@ -1060,9 +1060,9 @@ window.COACH_CLIPS = {
     "file": "assets/coach/82ba52f5b6764a10.mp3",
     "duration": 11.28
   },
-  "Dumbbell floor press. 3 sets of 12 reps. Lie on the floor, knees bent, dumbbells over your chest.": {
-    "file": "assets/coach/36f36a1338dfc198.mp3",
-    "duration": 6.592
+  "Dumbbell floor press. 3 sets of 10 reps. Lie on the floor, knees bent, dumbbells over your chest.": {
+    "file": "assets/coach/ca72a83bd753b929.mp3",
+    "duration": 6.616
   },
   "Lower until your upper arms touch the floor, pause, press up.": {
     "file": "assets/coach/ef9f336ba7c7718a.mp3",
@@ -1159,5 +1159,53 @@ window.COACH_CLIPS = {
   "Hinge forward as the free leg reaches back.": {
     "file": "assets/coach/4f17dbc4d18f0bae.mp3",
     "duration": 2.297
+  },
+  "Hands on the bench edge a little wider than your shoulders, feet back until your body is one straight line from head to heels. Squeeze the glutes and brace lightly so the hips neither sag nor pike. Lower your chest to the bench edge, elbows angled back about 45 degrees. Push the bench away to the top. When 3 sets of 12 feel easy, move to knee push-ups on the floor, then full push-ups.": {
+    "file": "assets/coach/f90aaae50291b246.mp3",
+    "duration": 18.319
+  },
+  "Incline push-up. 3 sets of 8 reps. Hands on the bench edge a little wider than your shoulders, feet back until your body is one straight line from head to heels.": {
+    "file": "assets/coach/744f305eec4ec093.mp3",
+    "duration": 10.258
+  },
+  "Squeeze the glutes and brace lightly so the hips neither sag nor pike.": {
+    "file": "assets/coach/f453cc70b70a88c4.mp3",
+    "duration": 3.982
+  },
+  "Stand on the middle of the band, feet hip-width, ends in your hands with palms forward. Elbows stay pinned to your sides. Curl up, squeeze, then lower slowly over two seconds. Stand tall with the glutes tight. If you have to lean back to finish a rep, use a lighter band.": {
+    "file": "assets/coach/7ad2b5f51dd31693.mp3",
+    "duration": 15.952
+  },
+  "Band curl. 3 sets of 12 reps. Stand on the middle of the band, feet hip-width, ends in your hands with palms forward.": {
+    "file": "assets/coach/f07d4211e67cf622.mp3",
+    "duration": 7.047
+  },
+  "Elbows stay pinned to your sides.": {
+    "file": "assets/coach/b664733f073e4965.mp3",
+    "duration": 1.589
+  },
+  "Stand tall, a dumbbell in each hand, palms facing each other. Elbows pinned to your sides. Curl both up without swinging, then lower over two seconds. Too heavy for 8 clean reps? Curl one arm at a time, or go back to the band.": {
+    "file": "assets/coach/ece49482b33789ce.mp3",
+    "duration": 14.77
+  },
+  "Dumbbell hammer curl. 3 sets of 8 reps. Stand tall, a dumbbell in each hand, palms facing each other.": {
+    "file": "assets/coach/ec463ebdcb082111.mp3",
+    "duration": 6.998
+  },
+  "Elbows pinned to your sides.": {
+    "file": "assets/coach/576c0efff7715a82.mp3",
+    "duration": 1.462
+  },
+  "Lie on the floor with knees bent, one dumbbell held in both hands, arms straight up over your chest. Keep the upper arms still and bend only at the elbows, lowering the weight slowly behind your head. Straighten the arms to the top. The floor holds your back, so keep the ribs down and don't arch.": {
+    "file": "assets/coach/02ed1fc37da7b5b0.mp3",
+    "duration": 15.981
+  },
+  "Lying triceps extension. 3 sets of 10 reps. Lie on the floor with knees bent, one dumbbell held in both hands, arms straight up over your chest.": {
+    "file": "assets/coach/421105d28d8e34b7.mp3",
+    "duration": 9.927
+  },
+  "Keep the upper arms still and bend only at the elbows, lowering the weight slowly behind your head.": {
+    "file": "assets/coach/e590e6cb665f533f.mp3",
+    "duration": 5.85
   }
 };

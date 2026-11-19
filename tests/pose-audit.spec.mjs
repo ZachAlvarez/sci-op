@@ -21,8 +21,8 @@ for (const figure of ["original", "human"]) {
     expect(report.is3D, "WebGL is required for the audit").toBe(true);
     // A failed human asset load silently falls back to the original figure.
     expect(report.figure).toBe(figure);
-    expect(report.exercises).toBe(24);
-    expect(report.samples).toBe(1008);
+    expect(report.exercises).toBe(28);
+    expect(report.samples).toBe(1176);
     expect(report.errors).toEqual([]);
   });
 }

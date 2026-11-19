@@ -1,7 +1,9 @@
 import { test, expect } from "@playwright/test";
 
-async function openApp(page, { symptoms = [], training = false } = {}) {
-  await page.addInitScript(({ symptoms, training }) => {
+// Strength days alternate lower and upper body. Tests pin today to the lower
+// body unless they pass focus: null to exercise the alternation itself.
+async function openApp(page, { symptoms = [], training = false, focus = "lower" } = {}) {
+  await page.addInitScript(({ symptoms, training, focus }) => {
     const key = "b2l-state-v1";
     if (localStorage.getItem(key)) return;
     const date = offset => {
@@ -14,8 +16,9 @@ async function openApp(page, { symptoms = [], training = false } = {}) {
       log[date(1)] ||= { done: [], sym: null, extra: false };
       log[date(1)].training = { goblet: { weight:25, unit:"lb", reps:"10, 8", difficulty:"Hard", notes:'Left side felt harder. <img src=x onerror="alert(1)">', updated:1 } };
     }
+    if (focus) { log[date(0)] ||= { done: [], sym: null, extra: false }; log[date(0)].focus = focus; }
     localStorage.setItem(key, JSON.stringify({ phase:1, strengthDays:[0,1,2,3,4,5,6], log, milestones:{}, updated:1 }));
-  }, { symptoms, training });
+  }, { symptoms, training, focus });
   await page.goto("/index.html?figure=original");
   await expect(page.getByRole("tab", { name:"Today", exact:true })).toBeVisible();
 }
@@ -108,6 +111,8 @@ test("recorded work survives reload, shows the last session, and safely renders 
   const tomorrow = await page.evaluate(() => { const d = new Date(); d.setDate(d.getDate()+1); return d.getTime(); });
   await page.clock.setFixedTime(new Date(tomorrow));
   await page.reload();
+  // After today's lower-body work, tomorrow defaults to the upper body.
+  await page.getByRole("button", { name:"Switch to glutes and legs", exact:true }).click();
   await page.locator('#view-today [data-record="goblet"]').click();
   await expect(page.locator('#record-form [name="weight"]')).toHaveValue("27.5");
   await expect(page.locator('#record-form [name="unit"]')).toHaveValue("kg");
@@ -284,11 +289,11 @@ test("saving a new record marks the exercise complete unless unchecked", async (
   await page.getByRole("button", { name:"Save entry", exact:true }).click();
   expect(await page.evaluate(() => dayLog().done)).toContain("goblet");
 
-  await page.locator('#view-today [data-record="row"]').click();
+  await page.locator('#view-today [data-record="hinge"]').click();
   await page.locator('#record-form [name="reps"]').fill("8, 8");
   await page.locator('#record-form [name="complete"]').uncheck();
   await page.getByRole("button", { name:"Save entry", exact:true }).click();
-  expect(await page.evaluate(() => dayLog().done)).not.toContain("row");
+  expect(await page.evaluate(() => dayLog().done)).not.toContain("hinge");
 });
 
 test("finishing the workout saves what was done and marks the rest skipped", async ({ page }) => {
@@ -334,7 +339,7 @@ test("glute work: phase 1 adds clamshells and bridge marches, phase 2 loads the 
 
   await page.getByRole("tab", { name:"Program", exact:true }).click();
   await page.locator('#view-program [data-phase="2"]').click();
-  const plan = await page.evaluate(() => ({ p2: PROGRAM[2], strength: todayPlan().strength }));
+  const plan = await page.evaluate(() => ({ p2: PROGRAM[2].lower, strength: todayPlan().strength }));
   expect(plan.p2).toContain("thrust");
   expect(plan.p2).toContain("slrdl");
   expect(plan.p2).not.toContain("bridge"); // the hip thrust is the loaded bridge
@@ -347,4 +352,33 @@ test("glute work: phase 1 adds clamshells and bridge marches, phase 2 loads the 
   expect(guide.sides).toEqual(["Standing on the right leg", "Standing on the left leg", "Right side down"]);
   expect(guide.marchReps).toHaveLength(3 * 8 * 2); // 8 lifts per side, alternating
   expect(guide.marchReps.slice(0, 4)).toEqual([false, true, false, true]);
+});
+
+test("strength days alternate lower and upper body, and today's focus can be switched", async ({ page }) => {
+  await openApp(page, { focus:null }); // no history: start with the lower body
+  const today = page.locator("#view-today");
+  await expect(today.locator('.exmain[data-open="t-bridge"]')).toBeVisible();
+  await expect(today.locator('.exmain[data-open="t-pushup"]')).toHaveCount(0);
+
+  // Yesterday was a lower-body day, so today is the upper body.
+  await page.evaluate(() => {
+    const d = new Date(); d.setDate(d.getDate() - 1);
+    S.log[todayKey(d)] = { done:["walk", "bridge", "goblet"], sym:null, extra:false };
+    save(); renderToday();
+  });
+  for (const id of ["pushup", "press", "row", "bcurl", "triext"]) await expect(today.locator(`.exmain[data-open="t-${id}"]`)).toBeVisible();
+  await expect(today.locator('.exmain[data-open="t-bridge"]')).toHaveCount(0);
+  expect(await page.evaluate(() => sessionIds())).toContain("pushup");
+
+  // Switching is remembered for today, survives reload, and drives the guided session.
+  await today.getByRole("button", { name:"Switch to glutes and legs" }).click();
+  await page.reload();
+  await expect(today.locator('.exmain[data-open="t-bridge"]')).toBeVisible();
+  const ids = await page.evaluate(() => sessionIds());
+  expect(ids).toContain("bridge");
+  expect(ids).not.toContain("pushup");
+
+  // A day spent on the upper body makes the next strength day lower body.
+  expect(await page.evaluate(() => dayFocus({ done:["pushup", "bcurl"] }))).toBe("upper");
+  expect(await page.evaluate(() => dayFocus({ done:["walk", "curl"] }))).toBe(null); // daily routine only
 });
