@@ -326,3 +326,25 @@ test("finishing the workout saves what was done and marks the rest skipped", asy
   await page.getByRole("button", { name:"Cancel", exact:true }).click();
   expect((await page.evaluate(() => dayLog().done)).sort()).toEqual(["bird","curl"]);
 });
+
+test("glute work: phase 1 adds clamshells and bridge marches, phase 2 loads the bridge and adds single-leg RDLs", async ({ page }) => {
+  await openApp(page);
+  const today = page.locator("#view-today");
+  for (const id of ["clam", "march"]) await expect(today.locator(`.exmain[data-open="t-${id}"]`)).toBeVisible();
+
+  await page.getByRole("tab", { name:"Program", exact:true }).click();
+  await page.locator('#view-program [data-phase="2"]').click();
+  const plan = await page.evaluate(() => ({ p2: PROGRAM[2], strength: todayPlan().strength }));
+  expect(plan.p2).toContain("thrust");
+  expect(plan.p2).toContain("slrdl");
+  expect(plan.p2).not.toContain("bridge"); // the hip thrust is the loaded bridge
+  expect(plan.strength).toEqual(plan.p2);
+
+  const guide = await page.evaluate(() => ({
+    sides:[sideName("slrdl", 1), sideName("slrdl", 2), sideName("clam", 1)],
+    marchReps: buildSegs("march", 0, 1).filter(s => s.kind === "rep").map(s => s.mirror)
+  }));
+  expect(guide.sides).toEqual(["Standing on the right leg", "Standing on the left leg", "Right side down"]);
+  expect(guide.marchReps).toHaveLength(3 * 8 * 2); // 8 lifts per side, alternating
+  expect(guide.marchReps.slice(0, 4)).toEqual([false, true, false, true]);
+});
